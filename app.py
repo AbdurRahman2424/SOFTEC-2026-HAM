@@ -207,7 +207,7 @@ def inject_css():
 # ============================================================================
 # LLM API CALL WITH FALLBACK CHAIN
 # ============================================================================
-def call_llm(prompt: str, system_prompt: str = "") -> str:
+def call_llm(prompt: str, system_prompt: str = "", is_json: bool = True) -> str:
     slots = st.session_state["api_slots"]
     settings = st.session_state["extraction_settings"]
     active_slots = [s for s in slots if s["enabled"] and s["api_key"].strip()]
@@ -230,13 +230,16 @@ def call_llm(prompt: str, system_prompt: str = "") -> str:
                 messages.append({"role": "system", "content": sys_msg})
             messages.append({"role": "user", "content": prompt})
 
-            response = client.chat.completions.create(
-                model=slot["model"],
-                messages=messages,
-                max_tokens=settings["max_tokens"],
-                temperature=0.1,
-                response_format={"type": "json_object"},
-            )
+            kwargs = {
+                "model": slot["model"],
+                "messages": messages,
+                "max_tokens": settings["max_tokens"],
+                "temperature": 0.1 if is_json else 0.7,
+            }
+            if is_json:
+                kwargs["response_format"] = {"type": "json_object"}
+
+            response = client.chat.completions.create(**kwargs)
             elapsed = int((time.time() - start) * 1000)
             result = response.choices[0].message.content
             st.session_state["api_log"].insert(
@@ -721,6 +724,18 @@ def render_profile_tab():
     if completeness < 0.6:
         st.warning("Fill out more fields to get better opportunity matching.")
 
+    st.divider()
+    st.subheader("📄 Upload CV / Documents")
+    uploaded_files = st.file_uploader(
+        "Upload your CV, transcripts, or certificates (PDF, PNG, JPG allowed)",
+        type=["pdf", "png", "jpg", "jpeg"],
+        accept_multiple_files=True,
+        key="prof_cv_files"
+    )
+    if uploaded_files:
+        st.success(f"Attached {len(uploaded_files)} document(s) to your profile.")
+
+    st.divider()
     if st.button("💾 Save Profile", key="save_profile_btn"):
         st.session_state["profile"] = {
             "name": name.strip(),
@@ -775,6 +790,7 @@ def render_scout_tab():
                                 "char_count": len(email_input.strip()),
                             }
                         )
+                        st.session_state["email_input_area"] = ""
                         st.success(
                             f"Added! Batch now has {len(st.session_state['email_batch'])} email(s)."
                         )
@@ -1135,6 +1151,35 @@ def render_board_tab():
 
 
 # ============================================================================
+# CHATBOT TAB
+# ============================================================================
+def render_chatbot_tab():
+    st.subheader("💬 AI Guide Chatbot")
+    st.caption("Ask questions about opportunities, scholarships, or how to prepare your application!")
+    
+    if "chat_history" not in st.session_state:
+        st.session_state["chat_history"] = []
+        
+    for msg in st.session_state["chat_history"]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            
+    if prompt := st.chat_input("Ask me anything..."):
+        st.session_state["chat_history"].append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+            
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    sys_prompt = "You are a helpful academic and career guide for fresh graduates. Keep answers concise."
+                    response = call_llm(prompt, system_prompt=sys_prompt, is_json=False)
+                    st.markdown(response)
+                    st.session_state["chat_history"].append({"role": "assistant", "content": response})
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+
+# ============================================================================
 # SIDEBAR
 # ============================================================================
 def render_sidebar():
@@ -1212,22 +1257,38 @@ Subject: FLASH SALE! 70% off on all Electronics this weekend only!
 
 Don't miss out! This weekend only — massive discounts on laptops, phones, and accessories at ShopMax.pk. Use code FLASH70 at checkout. Visit www.shopmax.pk. Offer valid while stocks last."""
 
+        demo_email_4 = """From: talent@deepmind-labs.com
+Subject: INTERNSHIP OFFER: Research Intern (Computer Vision & Robotics)
+
+Dear AbdurRahman, we are pleased to invite you to join the Summer 2026 Internship cohort at DeepMind. Based on your work with YOLO11 and FaceNet architectures, you have been assigned to the Perception Team. This is a 12-week remote-first position starting June 1, 2026. You will receive a monthly stipend of $5,500.00, plus a one-time equipment grant of $2,000.00 for hardware upgrades. Please sign the attached NDA and offer letter by April 28, 2026. Your primary project will involve optimizing real-time inference on edge devices (ESP32-S3). We look forward to your contributions to our neural-link initiatives.
+Ref ID: #INT-2026-DM"""
+
+        demo_email_5 = """From: hr@punjab-agritech.gov.pk
+Subject: JOB OPPORTUNITY: Veterinary Data Analyst (Lahore Office)
+
+Greetings, Punjab AgriTech is seeking a specialized individual for the role of Veterinary Data Analyst. This unique position requires a bridge between Veterinary Sciences and Data Science. You will be responsible for digitizing livestock health records and implementing predictive models for disease outbreaks in the Ravi River belt. The starting salary is Rs. 185,000 per month with full medical coverage for your family. Candidates must demonstrate proficiency in Python and SQL. Interviews will be held at our Gulberg III office on May 5, 2026. Please bring your transcript and a portfolio of any IoT-based monitoring systems you have developed.
+Job Code: AG-LHE-772"""
+
+        demo_email_6 = """From: admissions@fulbright-program.org
+Subject: SCHOLARSHIP UPDATE: Fulbright-USEFP Master’s Award 2027
+
+Dear Applicant, we are pleased to inform you that your preliminary application for the Fulbright Scholarship has been shortlisted. This award covers 100% of tuition fees, a monthly living allowance of $2,100.00, and round-trip airfare to the United States. To proceed to the interview stage, you must submit your final GRE scores and two letters of recommendation by the deadline of August 15, 2026. Given your dual background in CS and Veterinary Sciences, we highly recommend focusing your "Study Objective" on how AI can revolutionize animal pathology. Please use the portal link below to upload your documents.
+Application ID: PK-2026-FB-99"""
+
+        demo_email_7 = """From: scholarships@hec.gov.pk
+Subject: HEC Indigenous PhD Fellowship — Batch IV Announcement
+
+Notice: The Higher Education Commission (HEC) of Pakistan is now accepting applications for the Indigenous PhD Fellowship. This scholarship is designed for students currently enrolled in top-tier universities like Bahria University. Selected fellows will receive a monthly stipend of Rs. 45,000 and an annual book allowance of Rs. 10,000. The deadline for the online E-portal submission is May 20, 2026. Applicants must have a minimum CGPA of 3.0 and pass the HAT entry test. Please ensure your department head signs the "Statement of Purpose" before final submission.
+Ref: HEC-IND-990"""
+
         st.session_state["email_batch"] = [
-            {
-                "text": demo_email_1,
-                "preview": "From: scholarships@usaid.gov.pk",
-                "char_count": len(demo_email_1),
-            },
-            {
-                "text": demo_email_2,
-                "preview": "From: hr@techventuresLahore.com",
-                "char_count": len(demo_email_2),
-            },
-            {
-                "text": demo_email_3,
-                "preview": "From: deals@shopmax.pk",
-                "char_count": len(demo_email_3),
-            },
+            {"text": demo_email_1, "preview": "From: scholarships@usaid.gov.pk", "char_count": len(demo_email_1)},
+            {"text": demo_email_2, "preview": "From: hr@techventuresLahore.com", "char_count": len(demo_email_2)},
+            {"text": demo_email_3, "preview": "From: deals@shopmax.pk", "char_count": len(demo_email_3)},
+            {"text": demo_email_4, "preview": "From: talent@deepmind-labs.com", "char_count": len(demo_email_4)},
+            {"text": demo_email_5, "preview": "From: hr@punjab-agritech.gov.pk", "char_count": len(demo_email_5)},
+            {"text": demo_email_6, "preview": "From: admissions@fulbright-program.org", "char_count": len(demo_email_6)},
+            {"text": demo_email_7, "preview": "From: scholarships@hec.gov.pk", "char_count": len(demo_email_7)},
         ]
         st.session_state["scan_complete"] = False
         st.session_state["results"] = []
@@ -1287,8 +1348,8 @@ def main():
             unsafe_allow_html=True,
         )
 
-        tab1, tab2, tab3 = st.tabs(
-            ["👤 My Profile", "📨 Scout Emails", "🏆 Priority Board"]
+        tab1, tab2, tab3, tab4 = st.tabs(
+            ["👤 My Profile", "📨 Scout Emails", "🏆 Priority Board", "💬 AI Guide"]
         )
         with tab1:
             render_profile_tab()
@@ -1296,6 +1357,8 @@ def main():
             render_scout_tab()
         with tab3:
             render_board_tab()
+        with tab4:
+            render_chatbot_tab()
 
 
 if __name__ == "__main__":
