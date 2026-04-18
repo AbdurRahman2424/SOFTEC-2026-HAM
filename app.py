@@ -1188,6 +1188,36 @@ def render_board_tab():
                     done_count / len(checklist),
                     text=f"{done_count}/{len(checklist)} steps completed",
                 )
+            
+            st.divider()
+            st.markdown("#### 🤖 Auto-Apply")
+            draft_key = f"draft_{title_key}"
+            if st.button("Generate Email Draft via AI", key=f"draft_btn_{opp_idx}"):
+                with st.spinner("Drafting your email..."):
+                    prof = st.session_state["profile"]
+                    prompt = f"Write a short, professional email applying for the opportunity '{opp.get('title')}' at '{opp.get('organization')}'. My profile:\nName: {prof.get('name')}\nDegree: {prof.get('degree')}\nCGPA: {prof.get('cgpa')}\nSkills: {', '.join(prof.get('skills', []))}\n\nOpportunity Details:\n{opp}\n\nWrite the clear subject on the first line starting with 'Subject:'. Do not include any [] placeholders requiring my input."
+                    sys_prompt = "You are an expert career advisor. Output only the email text. Do not output markdown fences."
+                    try:
+                        draft = call_llm(prompt, system_prompt=sys_prompt, is_json=False)
+                        st.session_state[draft_key] = draft
+                    except Exception as e:
+                        st.error(f"Failed to generate draft: {str(e)}")
+
+            if draft_key in st.session_state:
+                st.text_area("Your Draft", value=st.session_state[draft_key], height=250, key=f"draft_text_{opp_idx}")
+                import urllib.parse
+                email_to = opp.get("contact_email") or ""
+                draft_text = st.session_state[draft_key]
+                subject_line = opp.get("title") or "Application"
+                # If LLM wrote "Subject: xyz", parse it out for the mailto
+                lines = draft_text.split("\n")
+                if lines and "Subject:" in lines[0]:
+                    subject_line = lines[0].replace("Subject:", "").strip()
+                    draft_text = "\n".join(lines[1:]).strip()
+                
+                sub_encoded = urllib.parse.quote(subject_line)
+                body_encoded = urllib.parse.quote(draft_text)
+                st.link_button("Open Default Email App & Send 🚀", f"mailto:{email_to}?subject={sub_encoded}&body={body_encoded}")
 
         st.divider()
 
