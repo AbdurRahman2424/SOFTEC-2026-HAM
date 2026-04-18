@@ -1,0 +1,1251 @@
+# pip install streamlit openai python-dateutil
+# streamlit run app.py
+
+# ============================================================================
+# OPPORTUNITY SCOUT AI — SOFTEC 2026
+# ============================================================================
+# A complete Streamlit application that lets students paste opportunity emails
+# (scholarships, internships, competitions, fellowships), extracts structured
+# data using an LLM, scores each opportunity against the student's profile
+# using a deterministic scoring engine, and outputs a ranked priority board
+# with action checklists.
+# ============================================================================
+
+import streamlit as st
+import json
+import re
+import time
+from datetime import date
+from dateutil.parser import parse as parse_date
+from openai import OpenAI
+
+# ============================================================================
+# PAGE CONFIG — MUST be the FIRST Streamlit call
+# ============================================================================
+st.set_page_config(
+    page_title="Opportunity Scout AI",
+    page_icon="🎯",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+
+# ============================================================================
+# SESSION STATE INITIALIZATION
+# ============================================================================
+def init_session_state():
+    defaults = {
+        "admin_unlocked": False,
+        "current_page": "scout",
+        "profile": {
+            "name": "",
+            "degree": "BSCS",
+            "semester": 4,
+            "cgpa": 3.0,
+            "skills_raw": "",
+            "skills": [],
+            "preferred_types": [],
+            "financial_need": False,
+            "location": "No Preference",
+        },
+        "email_batch": [],
+        "results": [],
+        "scan_complete": False,
+        "api_log": [],
+        "checklist_state": {},
+        "api_slots": [
+            {
+                "label": "Groq (Primary)",
+                "base_url": "https://api.groq.com/openai/v1",
+                "api_key": "",
+                "model": "llama-3.3-70b-versatile",
+                "enabled": True,
+            },
+            {
+                "label": "OpenRouter (Fallback 1)",
+                "base_url": "https://openrouter.ai/api/v1",
+                "api_key": "",
+                "model": "google/gemini-1.5-flash",
+                "enabled": True,
+            },
+            {
+                "label": "Together AI (Fallback 2)",
+                "base_url": "https://api.together.xyz/v1",
+                "api_key": "",
+                "model": "meta-llama/Llama-3-70b-chat-hf",
+                "enabled": True,
+            },
+            {
+                "label": "Fireworks AI (Fallback 3)",
+                "base_url": "https://api.fireworks.ai/inference/v1",
+                "api_key": "",
+                "model": "accounts/fireworks/models/llama-v3p1-70b-instruct",
+                "enabled": False,
+            },
+            {
+                "label": "LM Studio (Local)",
+                "base_url": "http://localhost:1234/v1",
+                "api_key": "lm-studio",
+                "model": "local-model",
+                "enabled": False,
+            },
+        ],
+        "scoring_weights": {
+            "academic": 30,
+            "skill": 30,
+            "urgency": 25,
+            "preference": 15,
+        },
+        "extraction_settings": {
+            "max_tokens": 1500,
+            "custom_system_prompt": "",
+        },
+    }
+
+    for key, val in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = val
+
+
+# ============================================================================
+# CUSTOM CSS INJECTION
+# ============================================================================
+def inject_css():
+    st.markdown(
+        """
+    <style>
+    /* Dark theme base */
+    [data-testid="stAppViewContainer"] { background-color: #0f1117; }
+    [data-testid="stSidebar"] { background-color: #1a1d27; border-right: 1px solid #2d3149; }
+
+    /* Primary button */
+    .stButton > button {
+        background-color: #4f46e5;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 0.5rem 1.5rem;
+        font-weight: 600;
+        transition: background-color 0.2s;
+    }
+    .stButton > button:hover { background-color: #4338ca; }
+
+    /* Score color bars applied via st.markdown on card containers */
+    .score-green  { border-left: 5px solid #22c55e; padding: 12px 16px; background: #0d1f17; border-radius: 0 8px 8px 0; margin-bottom: 16px; }
+    .score-yellow { border-left: 5px solid #eab308; padding: 12px 16px; background: #1f1d0d; border-radius: 0 8px 8px 0; margin-bottom: 16px; }
+    .score-orange { border-left: 5px solid #f97316; padding: 12px 16px; background: #1f150d; border-radius: 0 8px 8px 0; margin-bottom: 16px; }
+    .score-red    { border-left: 5px solid #ef4444; padding: 12px 16px; background: #1f0d0d; border-radius: 0 8px 8px 0; margin-bottom: 16px; }
+
+    /* Skill pills */
+    .skill-pill {
+        display: inline-block;
+        background: #312e81;
+        color: #c7d2fe;
+        border-radius: 12px;
+        padding: 2px 10px;
+        margin: 2px;
+        font-size: 0.85rem;
+    }
+
+    /* App header */
+    .app-header {
+        text-align: center;
+        padding: 1rem 0 0.5rem 0;
+        border-bottom: 1px solid #2d3149;
+        margin-bottom: 1rem;
+    }
+    .app-header h1 { color: #818cf8; font-size: 2rem; margin: 0; }
+    .app-header p  { color: #64748b; margin: 0; }
+    </style>
+    """,
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================================
+# LLM API CALL WITH FALLBACK CHAIN
+# ============================================================================
+def call_llm(prompt: str, system_prompt: str = "") -> str:
+    slots = st.session_state["api_slots"]
+    settings = st.session_state["extraction_settings"]
+    active_slots = [s for s in slots if s["enabled"] and s["api_key"].strip()]
+
+    if not active_slots:
+        raise ValueError(
+            "No API slots enabled with keys. Go to Admin Panel to configure."
+        )
+
+    for slot in active_slots:
+        start = time.time()
+        try:
+            client = OpenAI(
+                base_url=slot["base_url"].rstrip("/"),
+                api_key=slot["api_key"],
+            )
+            sys_msg = settings["custom_system_prompt"] or system_prompt
+            messages = []
+            if sys_msg:
+                messages.append({"role": "system", "content": sys_msg})
+            messages.append({"role": "user", "content": prompt})
+
+            response = client.chat.completions.create(
+                model=slot["model"],
+                messages=messages,
+                max_tokens=settings["max_tokens"],
+                temperature=0.1,
+                response_format={"type": "json_object"},
+            )
+            elapsed = int((time.time() - start) * 1000)
+            result = response.choices[0].message.content
+            st.session_state["api_log"].insert(
+                0,
+                f"[{time.strftime('%H:%M:%S')}] {slot['label']} → ✅ SUCCESS ({elapsed}ms)",
+            )
+            st.session_state["api_log"] = st.session_state["api_log"][:20]
+            return result
+        except Exception as e:
+            elapsed = int((time.time() - start) * 1000)
+            st.session_state["api_log"].insert(
+                0,
+                f"[{time.strftime('%H:%M:%S')}] {slot['label']} → ❌ {type(e).__name__}: {str(e)[:80]} ({elapsed}ms)",
+            )
+            st.session_state["api_log"] = st.session_state["api_log"][:20]
+            continue
+
+    raise RuntimeError(
+        "All API slots failed. Check the API Activity Log in the sidebar."
+    )
+
+
+# ============================================================================
+# EXTRACTION FUNCTION
+# ============================================================================
+EXTRACTION_SYSTEM_PROMPT = """
+You are an academic opportunity analyst. Given raw email/notice text, determine
+if it contains a real opportunity (scholarship, internship, competition, 
+fellowship, research position, or job opening). Extract all relevant details.
+
+CRITICAL: Respond ONLY with a valid JSON object. No markdown fences, no 
+explanation, no preamble. Your entire response must start with { and end with }.
+
+Use this exact schema:
+{
+  "is_genuine_opportunity": true or false,
+  "opportunity_type": "Scholarship|Internship|Competition|Fellowship|Research|Job|Other|Not an Opportunity",
+  "title": "string or null",
+  "organization": "string or null",
+  "deadline": "YYYY-MM-DD or null",
+  "eligibility": {
+    "min_cgpa": number or null,
+    "degree_required": "string or null",
+    "semester_range": [min_int, max_int] or null,
+    "other_conditions": ["string"]
+  },
+  "requirements": ["string — one item per required document or action step"],
+  "application_link": "string or null",
+  "contact_email": "string or null",
+  "stipend_or_benefit": "string or null",
+  "ai_reasoning": "2-3 sentence explanation: what is this opportunity, who is it for, and why might a CS/IT student care or not care?"
+}
+"""
+
+
+def extract_opportunity(email_text: str) -> dict:
+    user_prompt = f"""Analyze this email and extract structured information:
+
+---EMAIL START---
+{email_text}
+---EMAIL END---
+"""
+    raw_response = call_llm(user_prompt, system_prompt=EXTRACTION_SYSTEM_PROMPT)
+
+    # Attempt 1: direct JSON parse
+    try:
+        return json.loads(raw_response)
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    # Attempt 2: regex extraction
+    match = re.search(r"\{.*\}", raw_response, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Attempt 3: safe failure dict
+    return {
+        "is_genuine_opportunity": False,
+        "title": "Parse Error",
+        "ai_reasoning": "Could not parse LLM response.",
+        "opportunity_type": "Not an Opportunity",
+        "deadline": None,
+        "eligibility": {},
+        "requirements": [],
+        "application_link": None,
+        "contact_email": None,
+        "stipend_or_benefit": None,
+        "organization": None,
+    }
+
+
+# ============================================================================
+# SCORING ENGINE
+# ============================================================================
+def calculate_priority_score(
+    opportunity: dict, profile: dict, weights: dict
+) -> dict:
+    score = {"academic": 0, "skill": 0, "urgency": 0, "preference": 0, "bonus": 0}
+    matched_skills = []
+    days_left = None
+
+    # --- ACADEMIC FIT ---
+    half = weights["academic"] / 2
+    degree_req = (opportunity.get("eligibility") or {}).get("degree_required")
+    if not degree_req or profile["degree"].lower() in degree_req.lower():
+        score["academic"] += half
+
+    min_cgpa = (opportunity.get("eligibility") or {}).get("min_cgpa")
+    if min_cgpa is None or profile["cgpa"] >= min_cgpa:
+        score["academic"] += half
+
+    # --- SKILL MATCH ---
+    requirements = opportunity.get("requirements") or []
+    req_text = " ".join(requirements).lower()
+    student_skills = [
+        s.strip().lower() for s in profile.get("skills", []) if s.strip()
+    ]
+    if student_skills and req_text:
+        for skill in student_skills:
+            if skill in req_text:
+                matched_skills.append(skill)
+        score["skill"] = (len(matched_skills) / len(student_skills)) * weights["skill"]
+    elif not req_text:
+        score["skill"] = weights["skill"] * 0.5
+
+    # --- URGENCY ---
+    deadline_str = opportunity.get("deadline")
+    if deadline_str:
+        try:
+            deadline_date = parse_date(deadline_str).date()
+            days_left = (deadline_date - date.today()).days
+            if days_left < 0:
+                score["urgency"] = 0
+            elif days_left <= 3:
+                score["urgency"] = weights["urgency"]
+            elif days_left <= 7:
+                score["urgency"] = weights["urgency"] * 0.6
+            elif days_left <= 14:
+                score["urgency"] = weights["urgency"] * 0.4
+            else:
+                score["urgency"] = weights["urgency"] * 0.2
+        except Exception:
+            score["urgency"] = weights["urgency"] * 0.2
+    else:
+        score["urgency"] = weights["urgency"] * 0.2
+
+    # --- PREFERENCE ---
+    opp_type = opportunity.get("opportunity_type", "")
+    preferred = profile.get("preferred_types", [])
+    if not preferred:
+        score["preference"] = weights["preference"] * 0.5
+    elif opp_type in preferred:
+        score["preference"] = weights["preference"]
+
+    # --- BONUS (up to +10, not in weights) ---
+    if opportunity.get("stipend_or_benefit"):
+        score["bonus"] += 5
+    if opportunity.get("application_link"):
+        score["bonus"] += 5
+
+    total = sum(score.values())
+
+    if total >= 70:
+        color = "green"
+    elif total >= 50:
+        color = "yellow"
+    elif total >= 30:
+        color = "orange"
+    else:
+        color = "red"
+
+    return {
+        "total": round(total),
+        "breakdown": score,
+        "matched_skills": matched_skills,
+        "days_left": days_left,
+        "score_color": color,
+    }
+
+
+# ============================================================================
+# CHECKLIST GENERATION (deterministic, no LLM call)
+# ============================================================================
+def generate_checklist(opportunity: dict) -> list:
+    steps = []
+
+    # From requirements
+    for item in opportunity.get("requirements") or []:
+        steps.append(f"Prepare / obtain: {item}")
+
+    # Application link
+    app_link = opportunity.get("application_link")
+    if app_link:
+        steps.append(f"Submit application at: {app_link}")
+    else:
+        steps.append("Check email for application link")
+
+    # Deadline reminder
+    deadline = opportunity.get("deadline")
+    if deadline:
+        try:
+            deadline_date = parse_date(deadline).date()
+            dl = (deadline_date - date.today()).days
+            steps.append(
+                f"Set a calendar reminder: deadline is {deadline} ({dl} days left)"
+            )
+        except Exception:
+            steps.append(f"Set a calendar reminder: deadline is {deadline}")
+
+    # Contact email
+    contact = opportunity.get("contact_email")
+    if contact:
+        steps.append(
+            f"Email {contact} to confirm your application was received"
+        )
+
+    # Always add screenshot step
+    steps.append("Take a screenshot of your submission confirmation")
+
+    return steps[:8]
+
+
+# ============================================================================
+# ADMIN PANEL
+# ============================================================================
+def render_admin_panel():
+    st.markdown(
+        '<div class="app-header"><h1>⚙️ Admin Panel</h1><p>Configure API keys, scoring weights, and extraction settings</p></div>',
+        unsafe_allow_html=True,
+    )
+
+    # Password gate
+    if not st.session_state["admin_unlocked"]:
+        st.warning("🔒 This panel is password-protected.")
+        pwd = st.text_input(
+            "Admin Password", type="password", key="admin_pwd_input"
+        )
+        if st.button("🔓 Unlock", key="admin_unlock_btn"):
+            if pwd == "scout2026":
+                st.session_state["admin_unlocked"] = True
+                st.rerun()
+            else:
+                st.error("Incorrect password.")
+        return
+
+    # ---- Sub-section A: API SLOTS ----
+    st.subheader("🔑 LLM API Configuration (Fallback Chain)")
+    st.info(
+        "The app tries each enabled slot in order. If one fails (rate limit, "
+        "wrong key, timeout), it moves to the next automatically."
+    )
+
+    for i, slot in enumerate(st.session_state["api_slots"]):
+        with st.expander(slot["label"], expanded=(i == 0)):
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.text_input(
+                    "API Key",
+                    value=slot["api_key"],
+                    type="password",
+                    key=f"key_{i}",
+                )
+                st.text_input(
+                    "Base URL", value=slot["base_url"], key=f"url_{i}"
+                )
+                st.text_input(
+                    "Model Name", value=slot["model"], key=f"model_{i}"
+                )
+            with col2:
+                st.toggle(
+                    "Enabled", value=slot["enabled"], key=f"enabled_{i}"
+                )
+            if i == 4:
+                st.info(
+                    "💡 Start LM Studio → load any model → enable local server on port 1234 "
+                    "→ toggle this slot ON. No real API key needed."
+                )
+
+    col_save_api, col_test_api = st.columns(2)
+    with col_save_api:
+        if st.button("💾 Save API Configuration", key="save_api_btn"):
+            for i in range(len(st.session_state["api_slots"])):
+                st.session_state["api_slots"][i]["api_key"] = st.session_state.get(
+                    f"key_{i}", ""
+                )
+                st.session_state["api_slots"][i]["base_url"] = st.session_state.get(
+                    f"url_{i}", ""
+                )
+                st.session_state["api_slots"][i]["model"] = st.session_state.get(
+                    f"model_{i}", ""
+                )
+                st.session_state["api_slots"][i]["enabled"] = st.session_state.get(
+                    f"enabled_{i}", False
+                )
+            st.success("Configuration saved!")
+
+    with col_test_api:
+        if st.button("🔍 Test Active Chain", key="test_api_btn"):
+            try:
+                result = call_llm(
+                    '{"test": true}',
+                    system_prompt='Reply with exactly this JSON: {"status": "pong"}',
+                )
+                st.success(f"✅ Chain responded: {result}")
+            except Exception as e:
+                st.error(f"❌ Test failed: {e}")
+
+    st.divider()
+
+    # ---- Sub-section B: SCORING WEIGHTS ----
+    st.subheader("⚖️ Scoring Engine Weights")
+    st.info(
+        "Weights must sum to 100. Bonus points (+5 each for stipend and "
+        "application link) are added on top."
+    )
+
+    wcols = st.columns(4)
+    weight_keys = ["academic", "skill", "urgency", "preference"]
+    weight_labels = [
+        "🎓 Academic Fit",
+        "🔧 Skill Match",
+        "⏰ Urgency",
+        "⭐ Preference",
+    ]
+    weight_vals = {}
+    for idx, (wk, wl) in enumerate(zip(weight_keys, weight_labels)):
+        with wcols[idx]:
+            weight_vals[wk] = st.number_input(
+                wl,
+                min_value=0,
+                max_value=100,
+                value=st.session_state["scoring_weights"][wk],
+                key=f"weight_{wk}",
+            )
+
+    total_w = sum(weight_vals.values())
+    if total_w != 100:
+        st.warning(f"⚠️ Weights sum to {total_w}, not 100. Adjust before saving.")
+    else:
+        st.success("✅ Weights sum to 100")
+
+    if st.button("💾 Save Weights", key="save_weights_btn"):
+        st.session_state["scoring_weights"] = weight_vals.copy()
+        st.success("Weights saved!")
+
+    st.divider()
+
+    # ---- Sub-section C: EXTRACTION SETTINGS ----
+    st.subheader("🧠 Extraction Settings")
+    max_tokens = st.slider(
+        "Max Tokens per Extraction",
+        500,
+        4000,
+        st.session_state["extraction_settings"]["max_tokens"],
+        key="ext_max_tokens",
+    )
+    custom_sys = st.text_area(
+        "Custom System Prompt Override (optional)",
+        value=st.session_state["extraction_settings"]["custom_system_prompt"],
+        height=150,
+        key="ext_custom_sys",
+    )
+    if st.button("💾 Save Extraction Settings", key="save_ext_btn"):
+        st.session_state["extraction_settings"]["max_tokens"] = max_tokens
+        st.session_state["extraction_settings"]["custom_system_prompt"] = custom_sys
+        st.success("Extraction settings saved!")
+
+
+# ============================================================================
+# PROFILE TAB
+# ============================================================================
+def render_profile_tab():
+    st.subheader("👤 Student Profile")
+    st.caption(
+        "Fill in your profile for accurate opportunity matching and scoring."
+    )
+
+    p = st.session_state["profile"]
+
+    # Row 1
+    r1c1, r1c2 = st.columns(2)
+    with r1c1:
+        name = st.text_input("Full Name", value=p["name"], key="prof_name")
+    with r1c2:
+        degree = st.selectbox(
+            "Degree Program",
+            ["BSCS", "BSSE", "BSAI", "BSDS", "BBA", "MBA", "Other"],
+            index=["BSCS", "BSSE", "BSAI", "BSDS", "BBA", "MBA", "Other"].index(
+                p["degree"]
+            ),
+            key="prof_degree",
+        )
+
+    # Row 2
+    r2c1, r2c2 = st.columns(2)
+    with r2c1:
+        semester = st.slider(
+            "Current Semester", 1, 8, p["semester"], key="prof_semester"
+        )
+    with r2c2:
+        cgpa = st.number_input(
+            "CGPA",
+            min_value=0.0,
+            max_value=4.0,
+            value=float(p["cgpa"]),
+            step=0.01,
+            key="prof_cgpa",
+        )
+
+    # Row 3
+    skills_raw = st.text_area(
+        "Skills (comma-separated)",
+        value=p["skills_raw"],
+        placeholder="Python, SQL, Machine Learning, React, Arduino",
+        key="prof_skills_raw",
+    )
+
+    # Show parsed skills as pills
+    parsed_skills = [s.strip() for s in skills_raw.split(",") if s.strip()]
+    if parsed_skills:
+        pills_html = " ".join(
+            [f'<span class="skill-pill">{s}</span>' for s in parsed_skills]
+        )
+        st.markdown(pills_html, unsafe_allow_html=True)
+
+    # Row 4
+    preferred_types = st.multiselect(
+        "Preferred Opportunity Types",
+        ["Scholarship", "Internship", "Competition", "Fellowship", "Research", "Job"],
+        default=p["preferred_types"],
+        key="prof_preferred",
+    )
+
+    # Row 5
+    r5c1, r5c2 = st.columns(2)
+    with r5c1:
+        financial_need = st.toggle(
+            "Financial Need", value=p["financial_need"], key="prof_finaid"
+        )
+    with r5c2:
+        location = st.selectbox(
+            "Location Preference",
+            [
+                "No Preference",
+                "On-site Lahore",
+                "On-site Any City",
+                "Remote Only",
+            ],
+            index=[
+                "No Preference",
+                "On-site Lahore",
+                "On-site Any City",
+                "Remote Only",
+            ].index(p["location"]),
+            key="prof_location",
+        )
+
+    # Profile completeness bar
+    filled = sum(
+        [
+            bool(name.strip()),
+            bool(degree),
+            cgpa > 0,
+            len(parsed_skills) > 0,
+            len(preferred_types) > 0,
+        ]
+    )
+    completeness = filled / 5
+    st.progress(completeness, text=f"Profile {int(completeness * 100)}% complete")
+    if completeness < 0.6:
+        st.warning("Fill out more fields to get better opportunity matching.")
+
+    if st.button("💾 Save Profile", key="save_profile_btn"):
+        st.session_state["profile"] = {
+            "name": name.strip(),
+            "degree": degree,
+            "semester": semester,
+            "cgpa": cgpa,
+            "skills_raw": skills_raw,
+            "skills": parsed_skills,
+            "preferred_types": preferred_types,
+            "financial_need": financial_need,
+            "location": location,
+        }
+        st.success("Profile saved!")
+
+
+# ============================================================================
+# SCOUT TAB
+# ============================================================================
+def render_scout_tab():
+    col_left, col_right = st.columns([6, 4])
+
+    # --- LEFT COLUMN ---
+    with col_left:
+        st.subheader("📨 Paste Email Content")
+        st.caption(
+            "💡 Tip: Open any email → Ctrl+A → Ctrl+C → paste below. "
+            "Include the subject line and sender name for best results."
+        )
+
+        email_input = st.text_area(
+            "Email Content",
+            height=300,
+            placeholder="Paste the full email text here...\n\nExample:\nFrom: scholarships@hec.gov.pk\nSubject: HEC Need-Based Scholarship 2025\n\nDear Student,\n...",
+            key="email_input_area",
+        )
+
+        col_add, col_clear = st.columns(2)
+        with col_add:
+            if st.button("➕ Add to Batch", key="add_batch_btn"):
+                if email_input.strip():
+                    if len(st.session_state["email_batch"]) >= 15:
+                        st.error("Batch full (max 15 emails). Remove some first.")
+                    else:
+                        lines = email_input.strip().split("\n")
+                        preview = next(
+                            (l for l in lines if l.strip()), "Email"
+                        )[:60]
+                        st.session_state["email_batch"].append(
+                            {
+                                "text": email_input.strip(),
+                                "preview": preview,
+                                "char_count": len(email_input.strip()),
+                            }
+                        )
+                        st.success(
+                            f"Added! Batch now has {len(st.session_state['email_batch'])} email(s)."
+                        )
+                        st.rerun()
+                else:
+                    st.warning("Paste some email content first.")
+        with col_clear:
+            if st.button("🗑️ Clear Batch", key="clear_batch_btn"):
+                st.session_state["email_batch"] = []
+                st.session_state["results"] = []
+                st.session_state["scan_complete"] = False
+                st.rerun()
+
+        batch_count = len(st.session_state["email_batch"])
+        st.caption(f"📬 **{batch_count}/15** emails in batch")
+
+    # --- RIGHT COLUMN ---
+    with col_right:
+        st.subheader("📋 Email Batch")
+        if not st.session_state["email_batch"]:
+            st.info("No emails in batch yet. Add emails from the left panel.")
+        else:
+            for idx, email in enumerate(st.session_state["email_batch"]):
+                with st.expander(
+                    f"#{idx + 1} — {email['preview']}", expanded=False
+                ):
+                    st.caption(f"📝 {email['char_count']} characters")
+                    st.text(
+                        email["text"][:200]
+                        + ("..." if len(email["text"]) > 200 else "")
+                    )
+                    if st.button("❌ Remove", key=f"remove_{idx}"):
+                        st.session_state["email_batch"].pop(idx)
+                        st.rerun()
+
+    # --- BOTTOM: SCAN BUTTON ---
+    st.divider()
+    if st.session_state["email_batch"]:
+        if st.button(
+            "🚀 Scan All Opportunities",
+            type="primary",
+            use_container_width=True,
+            key="scan_all_btn",
+        ):
+            results = []
+            progress_bar = st.progress(0, text="Starting scan...")
+            status_text = st.empty()
+            total = len(st.session_state["email_batch"])
+
+            for i, email in enumerate(st.session_state["email_batch"]):
+                progress_bar.progress(
+                    i / total,
+                    text=f"Processing email {i + 1} of {total}...",
+                )
+                status_text.info(
+                    f"🔍 Extracting: {email['preview'][:50]}..."
+                )
+
+                try:
+                    with st.spinner(f"Analyzing email {i + 1}..."):
+                        extracted = extract_opportunity(email["text"])
+                        if extracted.get("is_genuine_opportunity"):
+                            score_data = calculate_priority_score(
+                                extracted,
+                                st.session_state["profile"],
+                                st.session_state["scoring_weights"],
+                            )
+                            checklist = generate_checklist(extracted)
+                            results.append(
+                                {
+                                    **extracted,
+                                    "score_data": score_data,
+                                    "checklist": checklist,
+                                    "original_preview": email["preview"],
+                                }
+                            )
+                        else:
+                            results.append(
+                                {
+                                    **extracted,
+                                    "score_data": {
+                                        "total": 0,
+                                        "score_color": "red",
+                                        "breakdown": {
+                                            "academic": 0,
+                                            "skill": 0,
+                                            "urgency": 0,
+                                            "preference": 0,
+                                            "bonus": 0,
+                                        },
+                                        "matched_skills": [],
+                                        "days_left": None,
+                                    },
+                                    "checklist": [],
+                                    "original_preview": email["preview"],
+                                }
+                            )
+                except Exception as e:
+                    st.error(f"Failed on email {i + 1}: {e}")
+                    results.append(
+                        {
+                            "is_genuine_opportunity": False,
+                            "title": email["preview"],
+                            "ai_reasoning": f"Scan failed: {str(e)}",
+                            "opportunity_type": "Not an Opportunity",
+                            "score_data": {
+                                "total": 0,
+                                "score_color": "red",
+                                "breakdown": {
+                                    "academic": 0,
+                                    "skill": 0,
+                                    "urgency": 0,
+                                    "preference": 0,
+                                    "bonus": 0,
+                                },
+                                "matched_skills": [],
+                                "days_left": None,
+                            },
+                            "checklist": [],
+                            "original_preview": email["preview"],
+                        }
+                    )
+
+            progress_bar.progress(1.0, text="Scan complete!")
+            status_text.success(
+                f"✅ Scanned {total} emails. Found "
+                f"{sum(1 for r in results if r.get('is_genuine_opportunity'))} opportunities."
+            )
+            st.session_state["results"] = results
+            st.session_state["scan_complete"] = True
+
+
+# ============================================================================
+# PRIORITY BOARD TAB
+# ============================================================================
+def render_board_tab():
+    if not st.session_state["scan_complete"]:
+        st.info(
+            "👈 Go to the Scout tab, add emails, and click 'Scan All Opportunities'."
+        )
+        return
+
+    results = st.session_state["results"]
+    genuine = [r for r in results if r.get("is_genuine_opportunity")]
+    filtered_out = [r for r in results if not r.get("is_genuine_opportunity")]
+    genuine.sort(key=lambda r: r["score_data"]["total"], reverse=True)
+
+    # --- TOP METRICS ---
+    mc1, mc2, mc3, mc4 = st.columns(4)
+    with mc1:
+        st.metric("📨 Total Scanned", len(results))
+    with mc2:
+        st.metric("🎯 Opportunities Found", len(genuine))
+    with mc3:
+        avg = (
+            int(
+                sum(r["score_data"]["total"] for r in genuine)
+                / max(len(genuine), 1)
+            )
+            if genuine
+            else 0
+        )
+        st.metric("📊 Avg Score", f"{avg}/100")
+    with mc4:
+        nearest = min(
+            (
+                r["score_data"]["days_left"]
+                for r in genuine
+                if r["score_data"].get("days_left") is not None
+            ),
+            default=None,
+        )
+        st.metric(
+            "⏰ Nearest Deadline",
+            f"{nearest} days" if nearest is not None else "N/A",
+        )
+
+    # --- FILTER ROW ---
+    fc1, fc2, fc3 = st.columns(3)
+    with fc1:
+        types = list(set(r.get("opportunity_type", "") for r in genuine))
+        type_filter = st.multiselect(
+            "Filter by Type", types, key="board_type_filter"
+        )
+    with fc2:
+        min_score = st.slider("Min Score", 0, 100, 0, key="board_min_score")
+    with fc3:
+        sort_by = st.selectbox(
+            "Sort By",
+            ["Score (High→Low)", "Deadline (Soonest)", "Type"],
+            key="board_sort",
+        )
+
+    # Apply filters
+    display = genuine[:]
+    if type_filter:
+        display = [r for r in display if r.get("opportunity_type") in type_filter]
+    display = [r for r in display if r["score_data"]["total"] >= min_score]
+    if sort_by == "Deadline (Soonest)":
+        display.sort(key=lambda r: r["score_data"].get("days_left") or 9999)
+    elif sort_by == "Type":
+        display.sort(key=lambda r: r.get("opportunity_type", ""))
+    else:
+        display.sort(key=lambda r: r["score_data"]["total"], reverse=True)
+
+    # --- OPPORTUNITY CARDS ---
+    for opp_idx, opp in enumerate(display):
+        color = opp["score_data"]["score_color"]
+        color_hex = {
+            "green": "#22c55e",
+            "yellow": "#eab308",
+            "orange": "#f97316",
+            "red": "#ef4444",
+        }[color]
+        score = opp["score_data"]["total"]
+        bar_filled = "█" * (score // 10)
+        bar_empty = "░" * (10 - score // 10)
+
+        st.markdown(
+            f"""
+        <div class="score-{color}">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <h3 style="margin:0;color:#f1f5f9">{opp.get('title', 'Untitled')}</h3>
+            <span style="color:{color_hex};font-size:1.4rem;font-weight:bold">{score}/100</span>
+          </div>
+          <div style="color:{color_hex};font-family:monospace">{bar_filled}{bar_empty}</div>
+          <div style="color:#94a3b8;font-size:0.9rem">
+            {opp.get('organization', 'Unknown Org')} &nbsp;|&nbsp;
+            <b style="color:#818cf8">{opp.get('opportunity_type', '')}</b>
+          </div>
+        </div>
+        """,
+            unsafe_allow_html=True,
+        )
+
+        # DETAILS ROW
+        col_d, col_cgpa, col_benefit = st.columns(3)
+        with col_d:
+            st.markdown("**⏰ Deadline**")
+            dl = opp.get("deadline")
+            days = opp["score_data"].get("days_left")
+            if dl:
+                urgency_tag = ""
+                if days is not None:
+                    if days < 0:
+                        urgency_tag = "🔴 EXPIRED"
+                    elif days <= 3:
+                        urgency_tag = "🚨 CRITICAL"
+                    elif days <= 7:
+                        urgency_tag = "⚠️ URGENT"
+                st.markdown(
+                    f"**{dl}**<br>{days} days left {urgency_tag}",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.write("Not specified")
+        with col_cgpa:
+            st.markdown("**📚 Min CGPA**")
+            min_cgpa = (opp.get("eligibility") or {}).get("min_cgpa")
+            student_cgpa = st.session_state["profile"]["cgpa"]
+            if min_cgpa:
+                meets = "✅" if student_cgpa >= min_cgpa else "❌"
+                st.markdown(
+                    f"**{min_cgpa}** {meets}<br>Your CGPA: {student_cgpa}",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.write("Not specified")
+        with col_benefit:
+            st.markdown("**💰 Benefit**")
+            st.write(opp.get("stipend_or_benefit") or "Not specified")
+
+        # SCORE BREAKDOWN
+        with st.expander("📊 Score Breakdown", expanded=False):
+            breakdown = opp["score_data"].get("breakdown", {})
+            weights = st.session_state["scoring_weights"]
+            components = ["academic", "skill", "urgency", "preference", "bonus"]
+            label_map = {
+                "academic": "🎓 Academic Fit",
+                "skill": "🔧 Skill Match",
+                "urgency": "⏰ Urgency",
+                "preference": "⭐ Preference",
+                "bonus": "🎁 Bonus",
+            }
+            for component in components:
+                earned = breakdown.get(component, 0)
+                max_pts = weights.get(component, 10)
+                pct = min(earned / max_pts, 1.0) if max_pts > 0 else 0
+                col_label, col_bar, col_val = st.columns([2, 5, 1])
+                with col_label:
+                    st.write(label_map.get(component, component))
+                with col_bar:
+                    st.progress(pct)
+                with col_val:
+                    st.write(f"{round(earned)}/{max_pts}")
+
+        # EVIDENCE CARD
+        with st.expander("🔍 Why This Matches You", expanded=False):
+            matched = opp["score_data"].get("matched_skills", [])
+            if matched:
+                pills = " ".join(
+                    [f'<span class="skill-pill">✓ {s}</span>' for s in matched]
+                )
+                st.markdown(
+                    f"**Matched Skills:** {pills}", unsafe_allow_html=True
+                )
+            else:
+                st.write("No direct skill matches found.")
+            st.write(f"**AI Analysis:** {opp.get('ai_reasoning', '')}")
+            if opp.get("application_link"):
+                st.markdown(f"🔗 [Apply Now]({opp['application_link']})")
+            if opp.get("contact_email"):
+                st.write(f"📧 Contact: {opp['contact_email']}")
+
+        # NEXT STEPS CHECKLIST
+        with st.expander("📋 Action Checklist", expanded=True):
+            checklist = opp.get("checklist", [])
+            title_key = (opp.get("title") or "opp")[:20].replace(" ", "_")
+            for step_idx, step in enumerate(checklist):
+                ck_key = f"ck_{title_key}_{step_idx}"
+                if ck_key not in st.session_state["checklist_state"]:
+                    st.session_state["checklist_state"][ck_key] = False
+                done = st.checkbox(
+                    f"Step {step_idx + 1}: {step}",
+                    value=st.session_state["checklist_state"][ck_key],
+                    key=f"board_ck_{opp_idx}_{step_idx}",
+                )
+                st.session_state["checklist_state"][ck_key] = done
+
+            if checklist:
+                done_count = sum(
+                    1
+                    for i in range(len(checklist))
+                    if st.session_state["checklist_state"].get(
+                        f"ck_{title_key}_{i}"
+                    )
+                )
+                st.progress(
+                    done_count / len(checklist),
+                    text=f"{done_count}/{len(checklist)} steps completed",
+                )
+
+        st.divider()
+
+    # --- FILTERED OUT SECTION ---
+    if filtered_out:
+        with st.expander(
+            f"🗂️ Filtered Out — Not Genuine Opportunities ({len(filtered_out)})"
+        ):
+            for r in filtered_out:
+                st.write(
+                    f"**{r.get('title') or r.get('original_preview', 'Unknown')}**"
+                )
+                st.caption(
+                    r.get("ai_reasoning", "No reasoning available.")
+                )
+                st.divider()
+
+
+# ============================================================================
+# SIDEBAR
+# ============================================================================
+def render_sidebar():
+    st.sidebar.markdown(
+        '<div class="app-header"><h1>🎯 Opportunity Scout</h1>'
+        "<p>SOFTEC 2026 — AI Hackathon</p></div>",
+        unsafe_allow_html=True,
+    )
+
+    page = st.sidebar.radio(
+        "Navigate", ["🎯 Scout", "⚙️ Admin Panel"], key="nav_radio"
+    )
+    st.session_state["current_page"] = page
+
+    st.sidebar.divider()
+
+    # DEMO DATA BUTTON
+    if st.sidebar.button("🎬 Load Demo Data", key="load_demo_btn"):
+        st.session_state["profile"] = {
+            "name": "Ahmed Raza",
+            "degree": "BSCS",
+            "semester": 5,
+            "cgpa": 3.2,
+            "skills_raw": "Python, Machine Learning, SQL, React",
+            "skills": ["python", "machine learning", "sql", "react"],
+            "preferred_types": ["Scholarship", "Internship"],
+            "financial_need": True,
+            "location": "No Preference",
+        }
+
+        demo_email_1 = """From: scholarships@usaid.gov.pk
+Subject: USAID Merit & Need-Based Scholarship 2025 — Applications Open
+
+Dear Student,
+
+The United States Agency for International Development (USAID) invites applications for the USAID Merit-Based Scholarship Program 2025. This scholarship provides PKR 150,000 per semester for undergraduate students in Computer Science, Software Engineering, or Artificial Intelligence programs.
+
+Eligibility:
+- Minimum CGPA: 3.0
+- Enrolled in Semester 3 to Semester 7
+- Demonstrated financial need
+
+Required Documents:
+- Official transcript
+- Completed application form
+- Proof of financial need (family income certificate)
+- Two reference letters
+
+Deadline: Apply before 2025-12-20 at https://scholarships.usaid.gov.pk/apply
+
+Contact: scholarships@usaid.gov.pk"""
+
+        demo_email_2 = """From: hr@techventuresLahore.com
+Subject: Paid Machine Learning Internship — Summer 2025
+
+Hi,
+
+Tech Ventures Lahore is offering a 3-month paid Machine Learning internship for university students passionate about AI.
+
+Stipend: PKR 30,000/month
+Duration: June–August 2025
+Location: Johar Town, Lahore (On-site)
+
+Requirements:
+- Python programming skills
+- Familiarity with scikit-learn or TensorFlow
+- Strong SQL fundamentals
+
+Apply by 2025-11-30 at https://careers.techventures.pk
+
+No minimum CGPA required. Semester 4+ preferred."""
+
+        demo_email_3 = """From: deals@shopmax.pk
+Subject: FLASH SALE! 70% off on all Electronics this weekend only!
+
+Don't miss out! This weekend only — massive discounts on laptops, phones, and accessories at ShopMax.pk. Use code FLASH70 at checkout. Visit www.shopmax.pk. Offer valid while stocks last."""
+
+        st.session_state["email_batch"] = [
+            {
+                "text": demo_email_1,
+                "preview": "From: scholarships@usaid.gov.pk",
+                "char_count": len(demo_email_1),
+            },
+            {
+                "text": demo_email_2,
+                "preview": "From: hr@techventuresLahore.com",
+                "char_count": len(demo_email_2),
+            },
+            {
+                "text": demo_email_3,
+                "preview": "From: deals@shopmax.pk",
+                "char_count": len(demo_email_3),
+            },
+        ]
+        st.session_state["scan_complete"] = False
+        st.session_state["results"] = []
+        st.sidebar.success("Demo data loaded! Go to Scout tab.")
+        st.rerun()
+
+    # PROFILE SUMMARY
+    p = st.session_state["profile"]
+    if p["name"]:
+        st.sidebar.markdown(
+            f"""
+        **{p['name']}** · Sem {p['semester']} · CGPA {p['cgpa']}  
+        {p['degree']} · {', '.join(p['preferred_types']) or 'No preferences set'}
+        """
+        )
+
+    # BATCH STATUS
+    st.sidebar.caption(
+        f"📬 Batch: {len(st.session_state['email_batch'])} emails"
+    )
+    if st.session_state["scan_complete"]:
+        genuine = sum(
+            1
+            for r in st.session_state["results"]
+            if r.get("is_genuine_opportunity")
+        )
+        st.sidebar.caption(f"🎯 Results: {genuine} opportunities found")
+
+    # API LOG
+    with st.sidebar.expander("📡 API Activity Log"):
+        log = st.session_state["api_log"]
+        if log:
+            for entry in log[:10]:
+                st.caption(entry)
+        else:
+            st.caption("No API calls yet.")
+
+
+# ============================================================================
+# MAIN FUNCTION
+# ============================================================================
+def main():
+    init_session_state()
+    inject_css()
+    render_sidebar()
+
+    if st.session_state["current_page"] == "⚙️ Admin Panel":
+        render_admin_panel()
+    else:
+        st.markdown(
+            """
+        <div class="app-header">
+          <h1>🎯 Opportunity Scout AI</h1>
+          <p>Paste your opportunity emails · Get ranked · Take action</p>
+        </div>
+        """,
+            unsafe_allow_html=True,
+        )
+
+        tab1, tab2, tab3 = st.tabs(
+            ["👤 My Profile", "📨 Scout Emails", "🏆 Priority Board"]
+        )
+        with tab1:
+            render_profile_tab()
+        with tab2:
+            render_scout_tab()
+        with tab3:
+            render_board_tab()
+
+
+if __name__ == "__main__":
+    main()
