@@ -142,6 +142,14 @@ def init_session_state():
             "max_tokens": 1500,
             "custom_system_prompt": "",
         },
+        "scan_thread_state": {
+            "is_running": False,
+            "progress": 0.0,
+            "current_email": "",
+            "completed": 0,
+            "total": 0,
+            "should_stop": False,
+        },
     }
 
     for key, val in defaults.items():
@@ -886,29 +894,57 @@ def render_scout_tab():
 
     # --- BOTTOM: SCAN BUTTON ---
     st.divider()
-    if st.session_state["email_batch"]:
+    state = st.session_state["scan_thread_state"]
+
+    if state["is_running"]:
+        st.info("Scan is running in the background. You can navigate away and come back.")
+        progress_bar = st.progress(state["progress"], text=f"Processing {state['completed']}/{max(state['total'], 1)}: {state['current_email']}...")
+        if st.button("Stop Scan", key="stop_scan_btn"):
+            state["should_stop"] = True
+            st.rerun()
+        else:
+            time.sleep(2)
+            st.rerun()
+    elif state["progress"] >= 1.0 and st.session_state["scan_complete"]:
+        st.success(f"Scan complete! Found {sum(1 for r in st.session_state['results'] if r.get('is_genuine_opportunity'))} opportunities.")
+        col_view, col_clear = st.columns(2)
+        with col_view:
+            if st.button("Go to Priority Board"):
+                st.session_state["current_page"] = "Priority Board"
+                st.rerun()
+        with col_clear:
+            if st.button("Clear Results & Rescan?"):
+                st.session_state["scan_complete"] = False
+                state["progress"] = 0.0
+                st.rerun()
+    elif st.session_state["email_batch"]:
         if st.button(
             "Scan All Opportunities",
             type="primary",
             use_container_width=True,
             key="scan_all_btn",
         ):
-            results = []
-            progress_bar = st.progress(0, text="Starting scan...")
-            status_text = st.empty()
-            total = len(st.session_state["email_batch"])
-
-            for i, email in enumerate(st.session_state["email_batch"]):
-                progress_bar.progress(
-                    i / total,
-                    text=f"Processing email {i + 1} of {total}...",
-                )
-                status_text.info(
-                    f"Extracting: {email['preview'][:50]}..."
-                )
-
-                try:
-                    with st.spinner(f"Analyzing email {i + 1}..."):
+            state["is_running"] = True
+            state["should_stop"] = False
+            state["progress"] = 0.0
+            state["completed"] = 0
+            state["total"] = len(st.session_state["email_batch"])
+            st.session_state["results"] = []
+            
+            import threading
+            from streamlit.runtime.scriptrunner import add_script_run_ctx
+            
+            def background_scan():
+                total = len(st.session_state["email_batch"])
+                results = []
+                for i, email in enumerate(st.session_state["email_batch"]):
+                    if st.session_state["scan_thread_state"]["should_stop"]:
+                        break
+                    
+                    st.session_state["scan_thread_state"]["current_email"] = email['preview'][:50]
+                    st.session_state["scan_thread_state"]["progress"] = i / max(total, 1)
+                    
+                    try:
                         extracted = extract_opportunity(email["text"])
                         if extracted.get("is_genuine_opportunity"):
                             score_data = calculate_priority_score(
@@ -932,13 +968,7 @@ def render_scout_tab():
                                     "score_data": {
                                         "total": 0,
                                         "score_color": "red",
-                                        "breakdown": {
-                                            "academic": 0,
-                                            "skill": 0,
-                                            "urgency": 0,
-                                            "preference": 0,
-                                            "bonus": 0,
-                                        },
+                                        "breakdown": {"academic": 0, "skill": 0, "urgency": 0, "preference": 0, "bonus": 0},
                                         "matched_skills": [],
                                         "days_left": None,
                                     },
@@ -946,10 +976,8 @@ def render_scout_tab():
                                     "original_preview": email["preview"],
                                 }
                             )
-                except Exception as e:
-                    st.error(f"Failed on email {i + 1}: {e}")
-                    results.append(
-                        {
+                    except Exception as e:
+                        results.append({
                             "is_genuine_opportunity": False,
                             "title": email["preview"],
                             "ai_reasoning": f"Scan failed: {str(e)}",
@@ -957,28 +985,27 @@ def render_scout_tab():
                             "score_data": {
                                 "total": 0,
                                 "score_color": "red",
-                                "breakdown": {
-                                    "academic": 0,
-                                    "skill": 0,
-                                    "urgency": 0,
-                                    "preference": 0,
-                                    "bonus": 0,
-                                },
+                                "breakdown": {"academic": 0, "skill": 0, "urgency": 0, "preference": 0, "bonus": 0},
                                 "matched_skills": [],
                                 "days_left": None,
                             },
                             "checklist": [],
                             "original_preview": email["preview"],
-                        }
-                    )
-
-            progress_bar.progress(1.0, text="Scan complete!")
-            status_text.success(
-                f"Scanned {total} emails. Found "
-                f"{sum(1 for r in results if r.get('is_genuine_opportunity'))} opportunities."
-            )
-            st.session_state["results"] = results
-            st.session_state["scan_complete"] = True
+                        })
+                    
+                    st.session_state["scan_thread_state"]["completed"] += 1
+                    st.session_state["scan_thread_state"]["progress"] = st.session_state["scan_thread_state"]["completed"] / max(total, 1)
+                
+                if not st.session_state["scan_thread_state"]["should_stop"]:
+                    st.session_state["results"] = results
+                    st.session_state["scan_complete"] = True
+                st.session_state["scan_thread_state"]["progress"] = 1.0
+                st.session_state["scan_thread_state"]["is_running"] = False
+            
+            t = threading.Thread(target=background_scan)
+            add_script_run_ctx(t)
+            t.start()
+            st.rerun()
 
 
 # ============================================================================
@@ -1302,9 +1329,20 @@ def load_demo_data():
     st.success("Demo data loaded! View it in the Scout Emails tab.")
     st.rerun()
 
+def render_activity_log_tab():
+    st.subheader("System Activity Log")
+    st.caption("Review all background LLM API calls and fallback chain events.")
+    with st.expander("API Activity Log", expanded=True):
+        log = st.session_state["api_log"]
+        if log:
+            for entry in log:
+                st.write(entry)
+        else:
+            st.write("No API calls yet.")
+
 def render_sidebar():
     page = st.sidebar.radio(
-        "Navigation", ["My Profile", "Scout Emails", "Priority Board", "AI Guide"], key="nav_radio", label_visibility="collapsed"
+        "Navigation", ["My Profile", "Scout Emails", "Priority Board", "AI Guide", "Activity Log"], key="nav_radio", label_visibility="collapsed"
     )
     st.session_state["current_page"] = page
 
@@ -1319,14 +1357,6 @@ def render_sidebar():
     if st.session_state["scan_complete"]:
         genuine = sum(1 for r in st.session_state["results"] if r.get("is_genuine_opportunity"))
         st.sidebar.caption(f"Results: {genuine} opportunities found")
-
-    with st.sidebar.expander("API Activity Log"):
-        log = st.session_state["api_log"]
-        if log:
-            for entry in log[:10]:
-                st.sidebar.caption(entry)
-        else:
-            st.sidebar.caption("No API calls yet.")
 
     st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
     if st.sidebar.button("Load Demo Data", use_container_width=True):
@@ -1377,6 +1407,8 @@ def main():
     elif page == "AI Guide" or page == "Scout":
         # Make chatbot or other function handle it
         render_chatbot_tab()
+    elif page == "Activity Log":
+        render_activity_log_tab()
 
 if __name__ == "__main__":
     main()
