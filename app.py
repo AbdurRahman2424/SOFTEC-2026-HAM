@@ -207,6 +207,17 @@ def inject_css():
         border-right: 1px solid color-mix(in srgb, var(--text-color) 12%, transparent);
     }}
 
+    /* Logo sizing — force height to 7rem */
+    [data-testid="stSidebar"] [data-testid="stLogo"],
+    [data-testid="stSidebar"] [data-testid="stLogo"] img,
+    [data-testid="stLogoSidebar"],
+    [data-testid="stLogoSidebar"] img {{
+        height: 12rem !important;
+        max-height: 7rem !important;
+        width: auto !important;
+        object-fit: contain;
+    }}
+
     /* Sidebar text inherits theme text color — no hard override */
     [data-testid="stSidebar"] p,
     [data-testid="stSidebar"] span,
@@ -289,6 +300,24 @@ def inject_css():
     }}
     .app-header h1 {{ color: var(--primary-color); font-size: 2rem; margin: 0; }}
     .app-header p  {{ color: var(--text-color); opacity: 0.7; margin: 0; }}
+
+    /* =============================================
+       LIGHT MODE — Gruvbox warm parchment background
+       Targets Streamlit's data-theme attribute so it
+       only applies when light theme is active.
+       ============================================= */
+    html[data-theme="light"] .stApp,
+    html[data-theme="light"] [data-testid="stAppViewContainer"],
+    html[data-theme="light"] [data-testid="stMain"],
+    html[data-theme="light"] section.main {{
+        background-color: #FEFAE0 !important;
+    }}
+    html[data-theme="light"] [data-testid="stSidebar"] {{
+        background-color: #F5F0D0 !important;
+    }}
+    html[data-theme="light"] [data-testid="stHeader"] {{
+        background-color: #FEFAE0 !important;
+    }}
     </style>
     """,
         unsafe_allow_html=True,
