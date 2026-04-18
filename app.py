@@ -153,29 +153,59 @@ def init_session_state():
 # CUSTOM CSS INJECTION
 # ============================================================================
 def inject_css():
+    primary_color = st.session_state.get("custom_primary_color", "#4f46e5")
     st.markdown(
-        """
+        f"""
     <style>
+    :root {{
+        --primary-color: {primary_color};
+    }}
+    
+    /* Claude Sidebar Style Overrides */
+    [data-testid="stSidebar"] {{
+        background-color: #1e1e1e !important;
+    }}
+    [data-testid="stSidebar"] * {{
+        color: #e5e7eb !important;
+    }}
+    div[role="radiogroup"] > label > div:first-child {{
+        display: none !important;
+    }}
+    div[role="radiogroup"] > label {{
+        padding: 10px 14px;
+        border-radius: 8px;
+        margin-bottom: 6px;
+        transition: background-color 0.2s;
+        cursor: pointer;
+    }}
+    div[role="radiogroup"] > label:hover {{
+        background-color: rgba(255, 255, 255, 0.1) !important;
+    }}
+    div[role="radiogroup"] > label[data-selected="true"] {{
+        background-color: rgba(255, 255, 255, 0.15) !important;
+        font-weight: 600;
+    }}
+
     /* Primary button */
-    .stButton > button {
-        background-color: var(--primary-color, #4f46e5);
-        color: white;
+    .stButton > button {{
+        background-color: var(--primary-color) !important;
+        color: white !important;
         border: none;
         border-radius: 8px;
         padding: 0.5rem 1.5rem;
         font-weight: 600;
         transition: background-color 0.2s;
-    }
-    .stButton > button:hover { opacity: 0.9; }
+    }}
+    .stButton > button:hover {{ opacity: 0.9; }}
 
     /* Score color bars applied via st.markdown on card containers */
-    .score-green  { border-left: 5px solid #22c55e; padding: 12px 16px; background: color-mix(in srgb, #22c55e 10%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }
-    .score-yellow { border-left: 5px solid #eab308; padding: 12px 16px; background: color-mix(in srgb, #eab308 10%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }
-    .score-orange { border-left: 5px solid #f97316; padding: 12px 16px; background: color-mix(in srgb, #f97316 10%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }
-    .score-red    { border-left: 5px solid #ef4444; padding: 12px 16px; background: color-mix(in srgb, #ef4444 10%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }
+    .score-green  {{ border-left: 5px solid #22c55e; padding: 12px 16px; background: color-mix(in srgb, #22c55e 10%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }}
+    .score-yellow {{ border-left: 5px solid #eab308; padding: 12px 16px; background: color-mix(in srgb, #eab308 10%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }}
+    .score-orange {{ border-left: 5px solid #f97316; padding: 12px 16px; background: color-mix(in srgb, #f97316 10%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }}
+    .score-red    {{ border-left: 5px solid #ef4444; padding: 12px 16px; background: color-mix(in srgb, #ef4444 10%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }}
 
     /* Skill pills */
-    .skill-pill {
+    .skill-pill {{
         display: inline-block;
         background: color-mix(in srgb, var(--primary-color) 20%, var(--background-color));
         color: var(--text-color);
@@ -184,16 +214,16 @@ def inject_css():
         padding: 2px 10px;
         margin: 2px;
         font-size: 0.85rem;
-    }
+    }}
 
     /* App header */
-    .app-header {
+    .app-header {{
         text-align: center;
         padding: 1rem 0 0.5rem 0;
         border-bottom: 1px solid var(--secondary-background-color);
-    }
-    .app-header h1 { color: var(--primary-color); font-size: 2rem; margin: 0; }
-    .app-header p  { color: var(--text-color); opacity: 0.7; margin: 0; }
+    }}
+    .app-header h1 {{ color: var(--primary-color); font-size: 2rem; margin: 0; }}
+    .app-header p  {{ color: var(--text-color); opacity: 0.7; margin: 0; }}
     </style>
     """,
         unsafe_allow_html=True,
@@ -1240,16 +1270,21 @@ def load_demo_data():
     st.session_state["scan_complete"] = False
     st.session_state["results"] = []
     st.success("Demo data loaded! View it in the Scout Emails tab.")
+    st.rerun()
 
 def render_sidebar():
-    st.sidebar.markdown(
-        '<div class="app-header" style="border-bottom:none;"><h2 style="color:var(--primary-color, #4f46e5);margin:0;">Opportunity Scout</h2>'
-        "<p style='color:var(--text-color);opacity:0.7;'>SOFTEC 2026 — AI Hackathon</p></div>",
-        unsafe_allow_html=True,
-    )
+    import os
+    if os.path.exists("media/logo.png"):
+        st.sidebar.image("media/logo.png", use_container_width=True)
+    else:
+        st.sidebar.markdown(
+            '<div class="app-header" style="border-bottom:none; margin-top:-10px;"><h2 style="color:var(--primary-color, #4f46e5);margin:0;">Opportunity Scout</h2>'
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
     page = st.sidebar.radio(
-        "Navigation", ["My Profile", "Scout Emails", "Priority Board", "AI Guide"], key="nav_radio"
+        "Navigation", ["My Profile", "Scout Emails", "Priority Board", "AI Guide"], key="nav_radio", label_visibility="collapsed"
     )
     st.session_state["current_page"] = page
 
@@ -1293,7 +1328,8 @@ def main():
             unsafe_allow_html=True,
         )
     with col2:
-        with st.popover("Options"):
+        with st.popover("⋮"):
+            st.color_picker("App Color", st.session_state.get("custom_primary_color", "#4f46e5"), key="custom_primary_color")
             if st.button("Load Demo Data", use_container_width=True):
                 load_demo_data()
             if st.button("Admin Panel", use_container_width=True):
