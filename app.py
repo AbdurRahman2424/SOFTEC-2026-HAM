@@ -44,7 +44,7 @@ def save_env(env_vars):
 # ============================================================================
 st.set_page_config(
     page_title="Opportunity Scout AI",
-    page_icon="🎯",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -244,7 +244,7 @@ def call_llm(prompt: str, system_prompt: str = "", is_json: bool = True) -> str:
             result = response.choices[0].message.content
             st.session_state["api_log"].insert(
                 0,
-                f"[{time.strftime('%H:%M:%S')}] {slot['label']} → ✅ SUCCESS ({elapsed}ms)",
+                f"[{time.strftime('%H:%M:%S')}] {slot['label']} → SUCCESS ({elapsed}ms)",
             )
             st.session_state["api_log"] = st.session_state["api_log"][:20]
             return result
@@ -252,7 +252,7 @@ def call_llm(prompt: str, system_prompt: str = "", is_json: bool = True) -> str:
             elapsed = int((time.time() - start) * 1000)
             st.session_state["api_log"].insert(
                 0,
-                f"[{time.strftime('%H:%M:%S')}] {slot['label']} → ❌ {type(e).__name__}: {str(e)[:80]} ({elapsed}ms)",
+                f"[{time.strftime('%H:%M:%S')}] {slot['label']} → {type(e).__name__}: {str(e)[:80]} ({elapsed}ms)",
             )
             st.session_state["api_log"] = st.session_state["api_log"][:20]
             continue
@@ -470,17 +470,17 @@ def generate_checklist(opportunity: dict) -> list:
 # ============================================================================
 def render_admin_panel():
     st.markdown(
-        '<div class="app-header"><h1>⚙️ Admin Panel</h1><p>Configure API keys, scoring weights, and extraction settings</p></div>',
+        '<div class="app-header"><h1>Admin Panel</h1><p>Configure API keys, scoring weights, and extraction settings</p></div>',
         unsafe_allow_html=True,
     )
 
     # Password gate
     if not st.session_state["admin_unlocked"]:
-        st.warning("🔒 This panel is password-protected.")
+        st.warning("This panel is password-protected.")
         pwd = st.text_input(
             "Admin Password", type="password", key="admin_pwd_input"
         )
-        if st.button("🔓 Unlock", key="admin_unlock_btn"):
+        if st.button("Unlock", key="admin_unlock_btn"):
             if pwd == "scout2026":
                 st.session_state["admin_unlocked"] = True
                 st.rerun()
@@ -489,7 +489,7 @@ def render_admin_panel():
         return
 
     # ---- Sub-section A: API SLOTS ----
-    st.subheader("🔑 LLM API Configuration (Fallback Chain)")
+    st.subheader("LLM API Configuration (Fallback Chain)")
     st.info(
         "The app tries each enabled slot in order. If one fails (rate limit, "
         "wrong key, timeout), it moves to the next automatically."
@@ -517,13 +517,13 @@ def render_admin_panel():
                 )
             if i == 6:
                 st.info(
-                    "💡 Start LM Studio → load any model → enable local server on port 1234 "
+                    "Start LM Studio → load any model → enable local server on port 1234 "
                     "→ toggle this slot ON. No real API key needed."
                 )
 
     col_save_api, col_test_api = st.columns(2)
     with col_save_api:
-        if st.button("💾 Save API Configuration", key="save_api_btn"):
+        if st.button("Save API Configuration", key="save_api_btn"):
             env_dict = {}
             for i in range(len(st.session_state["api_slots"])):
                 st.session_state["api_slots"][i]["api_key"] = st.session_state.get(
@@ -549,20 +549,20 @@ def render_admin_panel():
             st.success("Configuration saved to .env!")
 
     with col_test_api:
-        if st.button("🔍 Test Active Chain", key="test_api_btn"):
+        if st.button("Test Active Chain", key="test_api_btn"):
             try:
                 result = call_llm(
                     '{"test": true}',
                     system_prompt='Reply with exactly this JSON: {"status": "pong"}',
                 )
-                st.success(f"✅ Chain responded: {result}")
+                st.success(f"Chain responded: {result}")
             except Exception as e:
-                st.error(f"❌ Test failed: {e}")
+                st.error(f"Test failed: {e}")
 
     st.divider()
 
     # ---- Sub-section B: SCORING WEIGHTS ----
-    st.subheader("⚖️ Scoring Engine Weights")
+    st.subheader("Scoring Engine Weights")
     st.info(
         "Weights must sum to 100. Bonus points (+5 each for stipend and "
         "application link) are added on top."
@@ -571,10 +571,10 @@ def render_admin_panel():
     wcols = st.columns(4)
     weight_keys = ["academic", "skill", "urgency", "preference"]
     weight_labels = [
-        "🎓 Academic Fit",
-        "🔧 Skill Match",
-        "⏰ Urgency",
-        "⭐ Preference",
+        "Academic Fit",
+        "Skill Match",
+        "Urgency",
+        "Preference",
     ]
     weight_vals = {}
     for idx, (wk, wl) in enumerate(zip(weight_keys, weight_labels)):
@@ -589,18 +589,18 @@ def render_admin_panel():
 
     total_w = sum(weight_vals.values())
     if total_w != 100:
-        st.warning(f"⚠️ Weights sum to {total_w}, not 100. Adjust before saving.")
+        st.warning(f"Weights sum to {total_w}, not 100. Adjust before saving.")
     else:
-        st.success("✅ Weights sum to 100")
+        st.success("Weights sum to 100")
 
-    if st.button("💾 Save Weights", key="save_weights_btn"):
+    if st.button("Save Weights", key="save_weights_btn"):
         st.session_state["scoring_weights"] = weight_vals.copy()
         st.success("Weights saved!")
 
     st.divider()
 
     # ---- Sub-section C: EXTRACTION SETTINGS ----
-    st.subheader("🧠 Extraction Settings")
+    st.subheader("Extraction Settings")
     max_tokens = st.slider(
         "Max Tokens per Extraction",
         500,
@@ -614,7 +614,7 @@ def render_admin_panel():
         height=150,
         key="ext_custom_sys",
     )
-    if st.button("💾 Save Extraction Settings", key="save_ext_btn"):
+    if st.button("Save Extraction Settings", key="save_ext_btn"):
         st.session_state["extraction_settings"]["max_tokens"] = max_tokens
         st.session_state["extraction_settings"]["custom_system_prompt"] = custom_sys
         st.success("Extraction settings saved!")
@@ -624,7 +624,7 @@ def render_admin_panel():
 # PROFILE TAB
 # ============================================================================
 def render_profile_tab():
-    st.subheader("👤 Student Profile")
+    st.subheader("Student Profile")
     st.caption(
         "Fill in your profile for accurate opportunity matching and scoring."
     )
@@ -736,7 +736,7 @@ def render_profile_tab():
         st.success(f"Attached {len(uploaded_files)} document(s) to your profile.")
 
     st.divider()
-    if st.button("💾 Save Profile", key="save_profile_btn"):
+    if st.button("Save Profile", key="save_profile_btn"):
         st.session_state["profile"] = {
             "name": name.strip(),
             "degree": degree,
@@ -759,25 +759,57 @@ def render_scout_tab():
 
     # --- LEFT COLUMN ---
     with col_left:
-        st.subheader("📨 Paste Email Content")
+        st.subheader("Paste or Upload Email Content")
         st.caption(
-            "💡 Tip: Open any email → Ctrl+A → Ctrl+C → paste below. "
-            "Include the subject line and sender name for best results."
+            "Tip: You can drag and drop multiple email files (.txt, .eml) or paste raw text below."
         )
 
+        uploaded_emails = st.file_uploader(
+            "Drop Email Files here (Max 50)",
+            accept_multiple_files=True,
+            type=["txt", "eml"],
+            key="email_file_uploader"
+        )
+        if uploaded_emails:
+            if st.button("Add Uploaded Files to Batch", key="add_upload_btn"):
+                for uploaded_file in uploaded_emails:
+                    if len(st.session_state["email_batch"]) >= 50:
+                        st.error("Batch full (max 50 emails). Remove some first.")
+                        break
+                    try:
+                        content = uploaded_file.read().decode("utf-8")
+                        if content.strip():
+                            lines = content.strip().split("\n")
+                            preview_title = uploaded_file.name
+                            for l in lines:
+                                if "From:" in l or "Subject:" in l:
+                                    preview_title = l[:60]
+                                    break
+                            st.session_state["email_batch"].append({
+                                "text": content.strip(),
+                                "preview": preview_title,
+                                "char_count": len(content.strip()),
+                            })
+                    except Exception as e:
+                        st.error(f"Failed to read {uploaded_file.name}: {e}")
+                st.success(f"Processed files! Batch now has {len(st.session_state['email_batch'])} email(s).")
+                st.rerun()
+                
+        st.divider()
+
         email_input = st.text_area(
-            "Email Content",
-            height=300,
+            "Or Paste Email Content Manually",
+            height=200,
             placeholder="Paste the full email text here...\n\nExample:\nFrom: scholarships@hec.gov.pk\nSubject: HEC Need-Based Scholarship 2025\n\nDear Student,\n...",
             key="email_input_area",
         )
 
         col_add, col_clear = st.columns(2)
         with col_add:
-            if st.button("➕ Add to Batch", key="add_batch_btn"):
+            if st.button("Add to Batch", key="add_batch_btn"):
                 if email_input.strip():
-                    if len(st.session_state["email_batch"]) >= 15:
-                        st.error("Batch full (max 15 emails). Remove some first.")
+                    if len(st.session_state["email_batch"]) >= 50:
+                        st.error("Batch full (max 50 emails). Remove some first.")
                     else:
                         lines = email_input.strip().split("\n")
                         preview = next(
@@ -798,18 +830,18 @@ def render_scout_tab():
                 else:
                     st.warning("Paste some email content first.")
         with col_clear:
-            if st.button("🗑️ Clear Batch", key="clear_batch_btn"):
+            if st.button("Clear Batch", key="clear_batch_btn"):
                 st.session_state["email_batch"] = []
                 st.session_state["results"] = []
                 st.session_state["scan_complete"] = False
                 st.rerun()
 
         batch_count = len(st.session_state["email_batch"])
-        st.caption(f"📬 **{batch_count}/15** emails in batch")
+        st.caption(f"**{batch_count}/50** emails in batch")
 
     # --- RIGHT COLUMN ---
     with col_right:
-        st.subheader("📋 Email Batch")
+        st.subheader("Email Batch")
         if not st.session_state["email_batch"]:
             st.info("No emails in batch yet. Add emails from the left panel.")
         else:
@@ -817,12 +849,12 @@ def render_scout_tab():
                 with st.expander(
                     f"#{idx + 1} — {email['preview']}", expanded=False
                 ):
-                    st.caption(f"📝 {email['char_count']} characters")
+                    st.caption(f"{email['char_count']} characters")
                     st.text(
                         email["text"][:200]
                         + ("..." if len(email["text"]) > 200 else "")
                     )
-                    if st.button("❌ Remove", key=f"remove_{idx}"):
+                    if st.button("Remove", key=f"remove_{idx}"):
                         st.session_state["email_batch"].pop(idx)
                         st.rerun()
 
@@ -830,7 +862,7 @@ def render_scout_tab():
     st.divider()
     if st.session_state["email_batch"]:
         if st.button(
-            "🚀 Scan All Opportunities",
+            "Scan All Opportunities",
             type="primary",
             use_container_width=True,
             key="scan_all_btn",
@@ -846,7 +878,7 @@ def render_scout_tab():
                     text=f"Processing email {i + 1} of {total}...",
                 )
                 status_text.info(
-                    f"🔍 Extracting: {email['preview'][:50]}..."
+                    f"Extracting: {email['preview'][:50]}..."
                 )
 
                 try:
@@ -916,7 +948,7 @@ def render_scout_tab():
 
             progress_bar.progress(1.0, text="Scan complete!")
             status_text.success(
-                f"✅ Scanned {total} emails. Found "
+                f"Scanned {total} emails. Found "
                 f"{sum(1 for r in results if r.get('is_genuine_opportunity'))} opportunities."
             )
             st.session_state["results"] = results
@@ -941,9 +973,9 @@ def render_board_tab():
     # --- TOP METRICS ---
     mc1, mc2, mc3, mc4 = st.columns(4)
     with mc1:
-        st.metric("📨 Total Scanned", len(results))
+        st.metric("Total Scanned", len(results))
     with mc2:
-        st.metric("🎯 Opportunities Found", len(genuine))
+        st.metric("Opportunities Found", len(genuine))
     with mc3:
         avg = (
             int(
@@ -953,18 +985,16 @@ def render_board_tab():
             if genuine
             else 0
         )
-        st.metric("📊 Avg Score", f"{avg}/100")
+        st.metric("Avg Score", f"{avg}/100")
     with mc4:
-        nearest = min(
-            (
-                r["score_data"]["days_left"]
-                for r in genuine
-                if r["score_data"].get("days_left") is not None
-            ),
-            default=None,
-        )
+        valid_days = [
+            r["score_data"]["days_left"]
+            for r in genuine
+            if r["score_data"].get("days_left") is not None and r["score_data"]["days_left"] >= 0
+        ]
+        nearest = min(valid_days, default=None)
         st.metric(
-            "⏰ Nearest Deadline",
+            "Nearest Deadline",
             f"{nearest} days" if nearest is not None else "N/A",
         )
 
@@ -1029,18 +1059,18 @@ def render_board_tab():
         # DETAILS ROW
         col_d, col_cgpa, col_benefit = st.columns(3)
         with col_d:
-            st.markdown("**⏰ Deadline**")
+            st.markdown("**Deadline**")
             dl = opp.get("deadline")
             days = opp["score_data"].get("days_left")
             if dl:
                 urgency_tag = ""
                 if days is not None:
                     if days < 0:
-                        urgency_tag = "🔴 EXPIRED"
+                        urgency_tag = "EXPIRED"
                     elif days <= 3:
-                        urgency_tag = "🚨 CRITICAL"
+                        urgency_tag = "CRITICAL"
                     elif days <= 7:
-                        urgency_tag = "⚠️ URGENT"
+                        urgency_tag = "URGENT"
                 st.markdown(
                     f"**{dl}**<br>{days} days left {urgency_tag}",
                     unsafe_allow_html=True,
@@ -1052,7 +1082,7 @@ def render_board_tab():
             min_cgpa = (opp.get("eligibility") or {}).get("min_cgpa")
             student_cgpa = st.session_state["profile"]["cgpa"]
             if min_cgpa:
-                meets = "✅" if student_cgpa >= min_cgpa else "❌"
+                meets = "" if student_cgpa >= min_cgpa else ""
                 st.markdown(
                     f"**{min_cgpa}** {meets}<br>Your CGPA: {student_cgpa}",
                     unsafe_allow_html=True,
@@ -1060,20 +1090,20 @@ def render_board_tab():
             else:
                 st.write("Not specified")
         with col_benefit:
-            st.markdown("**💰 Benefit**")
+            st.markdown("**Benefit**")
             st.write(opp.get("stipend_or_benefit") or "Not specified")
 
         # SCORE BREAKDOWN
-        with st.expander("📊 Score Breakdown", expanded=False):
+        with st.expander("Score Breakdown", expanded=False):
             breakdown = opp["score_data"].get("breakdown", {})
             weights = st.session_state["scoring_weights"]
             components = ["academic", "skill", "urgency", "preference", "bonus"]
             label_map = {
-                "academic": "🎓 Academic Fit",
-                "skill": "🔧 Skill Match",
-                "urgency": "⏰ Urgency",
-                "preference": "⭐ Preference",
-                "bonus": "🎁 Bonus",
+                "academic": "Academic Fit",
+                "skill": "Skill Match",
+                "urgency": "Urgency",
+                "preference": "Preference",
+                "bonus": "Bonus",
             }
             for component in components:
                 earned = breakdown.get(component, 0)
@@ -1088,7 +1118,7 @@ def render_board_tab():
                     st.write(f"{round(earned)}/{max_pts}")
 
         # EVIDENCE CARD
-        with st.expander("🔍 Why This Matches You", expanded=False):
+        with st.expander("Why This Matches You", expanded=False):
             matched = opp["score_data"].get("matched_skills", [])
             if matched:
                 pills = " ".join(
@@ -1101,12 +1131,12 @@ def render_board_tab():
                 st.write("No direct skill matches found.")
             st.write(f"**AI Analysis:** {opp.get('ai_reasoning', '')}")
             if opp.get("application_link"):
-                st.markdown(f"🔗 [Apply Now]({opp['application_link']})")
+                st.markdown(f"[Apply Now]({opp['application_link']})")
             if opp.get("contact_email"):
-                st.write(f"📧 Contact: {opp['contact_email']}")
+                st.write(f"Contact: {opp['contact_email']}")
 
         # NEXT STEPS CHECKLIST
-        with st.expander("📋 Action Checklist", expanded=True):
+        with st.expander("Action Checklist", expanded=True):
             checklist = opp.get("checklist", [])
             title_key = (opp.get("title") or "opp")[:20].replace(" ", "_")
             for step_idx, step in enumerate(checklist):
@@ -1138,7 +1168,7 @@ def render_board_tab():
     # --- FILTERED OUT SECTION ---
     if filtered_out:
         with st.expander(
-            f"🗂️ Filtered Out — Not Genuine Opportunities ({len(filtered_out)})"
+            f"Filtered Out — Not Genuine Opportunities ({len(filtered_out)})"
         ):
             for r in filtered_out:
                 st.write(
@@ -1154,7 +1184,7 @@ def render_board_tab():
 # CHATBOT TAB
 # ============================================================================
 def render_chatbot_tab():
-    st.subheader("💬 AI Guide Chatbot")
+    st.subheader("AI Guide Chatbot")
     st.caption("Ask questions about opportunities, scholarships, or how to prepare your application!")
     
     if "chat_history" not in st.session_state:
@@ -1184,20 +1214,20 @@ def render_chatbot_tab():
 # ============================================================================
 def render_sidebar():
     st.sidebar.markdown(
-        '<div class="app-header"><h1>🎯 Opportunity Scout</h1>'
+        '<div class="app-header"><h1>Opportunity Scout</h1>'
         "<p>SOFTEC 2026 — AI Hackathon</p></div>",
         unsafe_allow_html=True,
     )
 
     page = st.sidebar.radio(
-        "Navigate", ["🎯 Scout", "⚙️ Admin Panel"], key="nav_radio"
+        "Navigate", ["Scout", "Admin Panel"], key="nav_radio"
     )
     st.session_state["current_page"] = page
 
     st.sidebar.divider()
 
     # DEMO DATA BUTTON
-    if st.sidebar.button("🎬 Load Demo Data", key="load_demo_btn"):
+    if st.sidebar.button("Load Demo Data", key="load_demo_btn"):
         st.session_state["profile"] = {
             "name": "Ahmed Raza",
             "degree": "BSCS",
@@ -1307,7 +1337,7 @@ Ref: HEC-IND-990"""
 
     # BATCH STATUS
     st.sidebar.caption(
-        f"📬 Batch: {len(st.session_state['email_batch'])} emails"
+        f"Batch: {len(st.session_state['email_batch'])} emails"
     )
     if st.session_state["scan_complete"]:
         genuine = sum(
@@ -1315,7 +1345,7 @@ Ref: HEC-IND-990"""
             for r in st.session_state["results"]
             if r.get("is_genuine_opportunity")
         )
-        st.sidebar.caption(f"🎯 Results: {genuine} opportunities found")
+        st.sidebar.caption(f"Results: {genuine} opportunities found")
 
     # API LOG
     with st.sidebar.expander("📡 API Activity Log"):
@@ -1335,13 +1365,13 @@ def main():
     inject_css()
     render_sidebar()
 
-    if st.session_state["current_page"] == "⚙️ Admin Panel":
+    if st.session_state["current_page"] == "Admin Panel":
         render_admin_panel()
     else:
         st.markdown(
             """
         <div class="app-header">
-          <h1>🎯 Opportunity Scout AI</h1>
+          <h1>Opportunity Scout AI</h1>
           <p>Paste your opportunity emails · Get ranked · Take action</p>
         </div>
         """,
@@ -1349,7 +1379,7 @@ def main():
         )
 
         tab1, tab2, tab3, tab4 = st.tabs(
-            ["👤 My Profile", "📨 Scout Emails", "🏆 Priority Board", "💬 AI Guide"]
+            ["My Profile", "Scout Emails", "Priority Board", "AI Guide"]
         )
         with tab1:
             render_profile_tab()
