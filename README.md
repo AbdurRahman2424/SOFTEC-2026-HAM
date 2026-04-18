@@ -109,6 +109,73 @@ venv/
 
 ---
 
+## 🔐 Admin Panel
+
+The Admin Panel is a password-protected configuration interface accessible from the **sidebar** (bottom button labeled **Admin Panel**).
+
+### Accessing the Admin Panel
+
+> **Default Password: `scout2026`**
+
+Click **Admin Panel** in the sidebar → enter the password → click **Unlock**.
+
+---
+
+### Section A — LLM API Configuration (Fallback Chain)
+
+This is the core of the application's resilience. The app works through a prioritised list of up to **7 API slots**. Each slot can be individually toggled on/off. When a slot fails (rate limit, bad key, timeout), the system automatically falls through to the next enabled slot.
+
+| Slot # | Label | Default Base URL | Default Model |
+|--------|-------|-----------------|---------------|
+| 1 | Groq 1 (Primary) | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
+| 2 | Groq 2 (Fallback 1) | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
+| 3 | OpenRouter 1 (Fallback 2) | `https://openrouter.ai/api/v1` | `nvidia/nemotron-3-nano-30b-a3b:free` |
+| 4 | OpenRouter 2 (Fallback 3) | `https://openrouter.ai/api/v1` | `nvidia/nemotron-3-nano-30b-a3b:free` |
+| 5 | Together AI (Fallback 4) | `https://api.together.xyz/v1` | `meta-llama/Llama-3-70b-chat-hf` |
+| 6 | Fireworks AI (Fallback 5) | `https://api.fireworks.ai/inference/v1` | `accounts/fireworks/models/llama-v3p1-70b-instruct` |
+| 7 | LM Studio (Local) | `http://localhost:1234/v1` | `local-model` |
+
+**For each slot, you can configure:**
+- **API Key** — your secret key from the respective provider
+- **Base URL** — the OpenAI-compatible endpoint for that provider
+- **Model Name** — the exact model identifier string
+
+After editing, click **Save API Configuration**. This writes all values securely to your local `.env` file.
+
+You can also click **Test Active Chain** to send a ping request through the chain and confirm it is working before running a real scan.
+
+> **Tip for LM Studio (Slot 7):** Start LM Studio → load any model → enable the local server on port 1234 → toggle the slot ON. The API key field can be left as `lm-studio`.
+
+---
+
+### Section B — Scoring Engine Weights
+
+Control how much each factor contributes to an opportunity's final score (out of 100):
+
+| Weight | Description | Default |
+|--------|-------------|---------|
+| **Academic Fit** | Degree and CGPA match | 30 |
+| **Skill Match** | How many of your skills appear in requirements | 30 |
+| **Urgency** | How close the deadline is | 25 |
+| **Preference** | Whether the type matches your preferred types | 15 |
+
+> **Bonus Points** (not part of the 100): +5 if a stipend/benefit is listed, +5 if an application link is present (max +10).
+
+Weights must sum to exactly **100** before you can save. Click **Save Weights** to apply.
+
+---
+
+### Section C — Extraction Settings
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| **Max Tokens per Extraction** | Token budget for each LLM extraction call | `1500` |
+| **Custom System Prompt Override** | Replaces the built-in extraction prompt entirely (advanced) | *(empty)* |
+
+Click **Save Extraction Settings** to apply to future scans.
+
+---
+
 ## 💡 Tech Stack
 - **Frontend & App Logic:** [Streamlit](https://streamlit.io/)
 - **Data & Date Operations:** Python `json`, `datetime`, and `python-dateutil`
