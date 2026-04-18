@@ -1273,16 +1273,6 @@ def load_demo_data():
     st.rerun()
 
 def render_sidebar():
-    import os
-    if os.path.exists("media/logo.png"):
-        st.sidebar.image("media/logo.png", use_container_width=True)
-    else:
-        st.sidebar.markdown(
-            '<div class="app-header" style="border-bottom:none; margin-top:-10px;"><h2 style="color:var(--primary-color, #4f46e5);margin:0;">Opportunity Scout</h2>'
-            "</div>",
-            unsafe_allow_html=True,
-        )
-
     page = st.sidebar.radio(
         "Navigation", ["My Profile", "Scout Emails", "Priority Board", "AI Guide"], key="nav_radio", label_visibility="collapsed"
     )
@@ -1308,6 +1298,13 @@ def render_sidebar():
         else:
             st.sidebar.caption("No API calls yet.")
 
+    st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
+    if st.sidebar.button("Load Demo Data", use_container_width=True):
+        load_demo_data()
+    if st.sidebar.button("Admin Panel", use_container_width=True):
+        st.session_state["current_page"] = "Admin Panel"
+        st.rerun()
+
 
 # ============================================================================
 # MAIN FUNCTION
@@ -1316,26 +1313,19 @@ def main():
     init_session_state()
     inject_css()
 
-    col1, col2 = st.columns([8, 2])
-    with col1:
-        st.markdown(
-            """
-        <div class="app-header" style="text-align:left; border:none; margin:0; padding:0 0 10px 0;">
-          <h1 style="color:var(--primary-color, #4f46e5); margin:0;">Opportunity Scout</h1>
-          <p style="color:var(--text-color); opacity:0.7; margin:0;">Paste your opportunity emails · Get ranked · Take action</p>
-        </div>
-        """,
-            unsafe_allow_html=True,
-        )
-    with col2:
-        with st.popover("⋮"):
-            st.color_picker("App Color", st.session_state.get("custom_primary_color", "#4f46e5"), key="custom_primary_color")
-            if st.button("Load Demo Data", use_container_width=True):
-                load_demo_data()
-            if st.button("Admin Panel", use_container_width=True):
-                st.session_state["current_page"] = "Admin Panel"
-                st.rerun()
+    import os
+    if os.path.exists("media/logo.png"):
+        st.logo("media/logo.png", icon_image="media/logo.png")
 
+    st.markdown(
+        """
+    <div class="app-header" style="text-align:left; border:none; margin:0; padding:0 0 10px 0;">
+        <h1 style="color:var(--primary-color, #4f46e5); margin:0;">Opportunity Scout</h1>
+        <p style="color:var(--text-color); opacity:0.7; margin:0;">Paste your opportunity emails · Get ranked · Take action</p>
+    </div>
+    """,
+        unsafe_allow_html=True,
+    )
     st.divider()
 
     if st.session_state.get("current_page") == "Admin Panel":
