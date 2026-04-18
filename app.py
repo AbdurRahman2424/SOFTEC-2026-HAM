@@ -11,6 +11,7 @@
 # with action checklists.
 # ============================================================================
 
+import os
 import streamlit as st
 import json
 import re
@@ -18,6 +19,25 @@ import time
 from datetime import date
 from dateutil.parser import parse as parse_date
 from openai import OpenAI
+
+# ============================================================================
+# DOTENV HELPER FUNCTIONS
+# ============================================================================
+def load_env():
+    env_vars = {}
+    if os.path.exists(".env"):
+        with open(".env", "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    env_vars[k.strip()] = v.strip().strip("'\"")
+    return env_vars
+
+def save_env(env_vars):
+    with open(".env", "w") as f:
+        for k, v in env_vars.items():
+            f.write(f"{k}={v}\n")
 
 # ============================================================================
 # PAGE CONFIG — MUST be the FIRST Streamlit call
@@ -34,6 +54,7 @@ st.set_page_config(
 # SESSION STATE INITIALIZATION
 # ============================================================================
 def init_session_state():
+    env_vars = load_env()
     defaults = {
         "admin_unlocked": False,
         "current_page": "scout",
@@ -55,39 +76,60 @@ def init_session_state():
         "checklist_state": {},
         "api_slots": [
             {
-                "label": "Groq (Primary)",
-                "base_url": "https://api.groq.com/openai/v1",
-                "api_key": "",
-                "model": "llama-3.3-70b-versatile",
-                "enabled": True,
+                "label": "Groq 1 (Primary)",
+                "base_url": env_vars.get("GROQ1_BASE_URL", "https://api.groq.com/openai/v1"),
+                "api_key": env_vars.get("GROQ1_API_KEY", ""),
+                "model": env_vars.get("GROQ1_MODEL", "llama-3.3-70b-versatile"),
+                "enabled": env_vars.get("GROQ1_ENABLED", "True") == "True",
+                "env_prefix": "GROQ1"
             },
             {
-                "label": "OpenRouter (Fallback 1)",
-                "base_url": "https://openrouter.ai/api/v1",
-                "api_key": "",
-                "model": "google/gemini-1.5-flash",
-                "enabled": True,
+                "label": "Groq 2 (Fallback 1)",
+                "base_url": env_vars.get("GROQ2_BASE_URL", "https://api.groq.com/openai/v1"),
+                "api_key": env_vars.get("GROQ2_API_KEY", ""),
+                "model": env_vars.get("GROQ2_MODEL", "llama-3.3-70b-versatile"),
+                "enabled": env_vars.get("GROQ2_ENABLED", "False") == "True",
+                "env_prefix": "GROQ2"
             },
             {
-                "label": "Together AI (Fallback 2)",
-                "base_url": "https://api.together.xyz/v1",
-                "api_key": "",
-                "model": "meta-llama/Llama-3-70b-chat-hf",
-                "enabled": True,
+                "label": "OpenRouter 1 (Fallback 2)",
+                "base_url": env_vars.get("OR1_BASE_URL", "https://openrouter.ai/api/v1"),
+                "api_key": env_vars.get("OR1_API_KEY", ""),
+                "model": env_vars.get("OR1_MODEL", "google/gemini-1.5-flash"),
+                "enabled": env_vars.get("OR1_ENABLED", "True") == "True",
+                "env_prefix": "OR1"
             },
             {
-                "label": "Fireworks AI (Fallback 3)",
-                "base_url": "https://api.fireworks.ai/inference/v1",
-                "api_key": "",
-                "model": "accounts/fireworks/models/llama-v3p1-70b-instruct",
-                "enabled": False,
+                "label": "OpenRouter 2 (Fallback 3)",
+                "base_url": env_vars.get("OR2_BASE_URL", "https://openrouter.ai/api/v1"),
+                "api_key": env_vars.get("OR2_API_KEY", ""),
+                "model": env_vars.get("OR2_MODEL", "google/gemini-1.5-flash"),
+                "enabled": env_vars.get("OR2_ENABLED", "False") == "True",
+                "env_prefix": "OR2"
+            },
+            {
+                "label": "Together AI (Fallback 4)",
+                "base_url": env_vars.get("TOGETHER_BASE_URL", "https://api.together.xyz/v1"),
+                "api_key": env_vars.get("TOGETHER_API_KEY", ""),
+                "model": env_vars.get("TOGETHER_MODEL", "meta-llama/Llama-3-70b-chat-hf"),
+                "enabled": env_vars.get("TOGETHER_ENABLED", "True") == "True",
+                "env_prefix": "TOGETHER"
+            },
+            {
+                "label": "Fireworks AI (Fallback 5)",
+                "base_url": env_vars.get("FIREWORKS_BASE_URL", "https://api.fireworks.ai/inference/v1"),
+                "api_key": env_vars.get("FIREWORKS_API_KEY", ""),
+                "model": env_vars.get("FIREWORKS_MODEL", "accounts/fireworks/models/llama-v3p1-70b-instruct"),
+                "enabled": env_vars.get("FIREWORKS_ENABLED", "False") == "True",
+                "env_prefix": "FIREWORKS"
             },
             {
                 "label": "LM Studio (Local)",
-                "base_url": "http://localhost:1234/v1",
-                "api_key": "lm-studio",
-                "model": "local-model",
-                "enabled": False,
+                "base_url": env_vars.get("LMSTUDIO_BASE_URL", "http://localhost:1234/v1"),
+                "api_key": env_vars.get("LMSTUDIO_API_KEY", "lm-studio"),
+                "model": env_vars.get("LMSTUDIO_MODEL", "local-model"),
+                "enabled": env_vars.get("LMSTUDIO_ENABLED", "False") == "True",
+                "env_prefix": "LMSTUDIO"
             },
         ],
         "scoring_weights": {
@@ -470,7 +512,7 @@ def render_admin_panel():
                 st.toggle(
                     "Enabled", value=slot["enabled"], key=f"enabled_{i}"
                 )
-            if i == 4:
+            if i == 6:
                 st.info(
                     "💡 Start LM Studio → load any model → enable local server on port 1234 "
                     "→ toggle this slot ON. No real API key needed."
@@ -479,6 +521,7 @@ def render_admin_panel():
     col_save_api, col_test_api = st.columns(2)
     with col_save_api:
         if st.button("💾 Save API Configuration", key="save_api_btn"):
+            env_dict = {}
             for i in range(len(st.session_state["api_slots"])):
                 st.session_state["api_slots"][i]["api_key"] = st.session_state.get(
                     f"key_{i}", ""
@@ -492,7 +535,15 @@ def render_admin_panel():
                 st.session_state["api_slots"][i]["enabled"] = st.session_state.get(
                     f"enabled_{i}", False
                 )
-            st.success("Configuration saved!")
+                
+                pfx = st.session_state["api_slots"][i]["env_prefix"]
+                env_dict[f"{pfx}_API_KEY"] = st.session_state["api_slots"][i]["api_key"]
+                env_dict[f"{pfx}_BASE_URL"] = st.session_state["api_slots"][i]["base_url"]
+                env_dict[f"{pfx}_MODEL"] = st.session_state["api_slots"][i]["model"]
+                env_dict[f"{pfx}_ENABLED"] = str(st.session_state["api_slots"][i]["enabled"])
+
+            save_env(env_dict)
+            st.success("Configuration saved to .env!")
 
     with col_test_api:
         if st.button("🔍 Test Active Chain", key="test_api_btn"):
