@@ -838,31 +838,31 @@ def render_scout_tab():
             key="email_input_area",
         )
 
+        def add_to_batch():
+            content = st.session_state.get("email_input_area", "").strip()
+            if content:
+                if len(st.session_state["email_batch"]) >= 50:
+                    st.error("Batch full (max 50 emails). Remove some first.")
+                else:
+                    lines = content.split("\n")
+                    preview = next(
+                        (l for l in lines if l.strip()), "Email"
+                    )[:60]
+                    st.session_state["email_batch"].append(
+                        {
+                            "text": content,
+                            "preview": preview,
+                            "char_count": len(content),
+                        }
+                    )
+                    st.session_state["email_input_area"] = ""
+            else:
+                st.warning("Paste some email content first.")
+
         col_add, col_clear = st.columns(2)
         with col_add:
-            if st.button("Add to Batch", key="add_batch_btn"):
-                if email_input.strip():
-                    if len(st.session_state["email_batch"]) >= 50:
-                        st.error("Batch full (max 50 emails). Remove some first.")
-                    else:
-                        lines = email_input.strip().split("\n")
-                        preview = next(
-                            (l for l in lines if l.strip()), "Email"
-                        )[:60]
-                        st.session_state["email_batch"].append(
-                            {
-                                "text": email_input.strip(),
-                                "preview": preview,
-                                "char_count": len(email_input.strip()),
-                            }
-                        )
-                        st.session_state["email_input_area"] = ""
-                        st.success(
-                            f"Added! Batch now has {len(st.session_state['email_batch'])} email(s)."
-                        )
-                        st.rerun()
-                else:
-                    st.warning("Paste some email content first.")
+            if st.button("Add to Batch", key="add_batch_btn", on_click=add_to_batch):
+                pass
         with col_clear:
             if st.button("Clear Batch", key="clear_batch_btn"):
                 st.session_state["email_batch"] = []
@@ -952,15 +952,27 @@ def render_scout_tab():
                                 st.session_state["profile"],
                                 st.session_state["scoring_weights"],
                             )
-                            checklist = generate_checklist(extracted)
-                            results.append(
-                                {
-                                    **extracted,
-                                    "score_data": score_data,
-                                    "checklist": checklist,
-                                    "original_preview": email["preview"],
-                                }
-                            )
+                            if score_data.get("days_left") is not None and score_data["days_left"] < 0:
+                                results.append(
+                                    {
+                                        **extracted,
+                                        "is_genuine_opportunity": False,
+                                        "ai_reasoning": "This opportunity has expired (deadline passed).",
+                                        "score_data": score_data,
+                                        "checklist": [],
+                                        "original_preview": email["preview"],
+                                    }
+                                )
+                            else:
+                                checklist = generate_checklist(extracted)
+                                results.append(
+                                    {
+                                        **extracted,
+                                        "score_data": score_data,
+                                        "checklist": checklist,
+                                        "original_preview": email["preview"],
+                                    }
+                                )
                         else:
                             results.append(
                                 {
@@ -1308,7 +1320,7 @@ def load_demo_data():
         "location": "No Preference",
     }
     demo_email_1 = "From: scholarships@usaid.gov.pk\nSubject: USAID Merit & Need-Based Scholarship 2025\n\nDear Student,\nThe United States Agency for International Development (USAID) invites applications for the USAID Merit-Based Scholarship Program 2025. This scholarship provides PKR 150,000 per semester for undergraduate students in Computer Science, Software Engineering, or Artificial Intelligence programs.\n\nEligibility:\n- Minimum CGPA: 3.0\n- Enrolled in Semester 3 to Semester 7\n- Demonstrated financial need\n\nRequired Documents:\n- Official transcript\n- Completed application form\n- Proof of financial need (family income certificate)\n- Two reference letters\n\nDeadline: Apply before 2025-12-20 at https://scholarships.usaid.gov.pk/apply\n\nContact: scholarships@usaid.gov.pk"
-    demo_email_2 = "From: hr@techventuresLahore.com\nSubject: Paid Machine Learning Internship — Summer 2025\n\nHi,\nTech Ventures Lahore is offering a 3-month paid Machine Learning internship for university students passionate about AI.\nStipend: PKR 30,000/month\nDuration: June–August 2025\nLocation: Johar Town, Lahore (On-site)\n\nRequirements:\n- Python programming skills\n- Familiarity with scikit-learn or TensorFlow\n- Strong SQL fundamentals\n\nApply by 2025-11-30 at https://careers.techventures.pk\nNo minimum CGPA required. Semester 4+ preferred."
+    demo_email_2 = "From: hr@techventuresLahore.com\nSubject: Paid Machine Learning Internship — Summer 2026\n\nHi,\nTech Ventures Lahore is offering a 3-month paid Machine Learning internship for university students passionate about AI.\nStipend: PKR 30,000/month\nDuration: June–August 2026\nLocation: Johar Town, Lahore (On-site)\n\nRequirements:\n- Python programming skills\n- Familiarity with scikit-learn or TensorFlow\n- Strong SQL fundamentals\n\nApply by 2026-11-30 at https://careers.techventures.pk\nNo minimum CGPA required. Semester 4+ preferred."
     demo_email_3 = "From: deals@shopmax.pk\nSubject: FLASH SALE! 70% off on all Electronics this weekend only!\nDon't miss out! This weekend only — massive discounts on laptops, phones, and accessories at ShopMax.pk. Use code FLASH70 at checkout. Visit www.shopmax.pk. Offer valid while stocks last."
     demo_email_4 = "From: talent@deepmind-labs.com\nSubject: INTERNSHIP OFFER: Research Intern (Computer Vision & Robotics)\nDear AbdurRahman, we are pleased to invite you to join the Summer 2026 Internship cohort at DeepMind. Based on your work with YOLO11 and FaceNet architectures, you have been assigned to the Perception Team. This is a 12-week remote-first position starting June 1, 2026. You will receive a monthly stipend of $5,500.00, plus a one-time equipment grant of $2,000.00 for hardware upgrades. Please sign the attached NDA and offer letter by April 28, 2026. Your primary project will involve optimizing real-time inference on edge devices (ESP32-S3). We look forward to your contributions to our neural-link initiatives."
     demo_email_5 = "From: hr@punjab-agritech.gov.pk\nSubject: JOB OPPORTUNITY: Veterinary Data Analyst (Lahore Office)\nGreetings, Punjab AgriTech is seeking a specialized individual for the role of Veterinary Data Analyst. This unique position requires a bridge between Veterinary Sciences and Data Science. You will be responsible for digitizing livestock health records and implementing predictive models for disease outbreaks in the Ravi River belt. The starting salary is Rs. 185,000 per month with full medical coverage for your family. Candidates must demonstrate proficiency in Python and SQL. Interviews will be held at our Gulberg III office on May 5, 2026. Please bring your transcript and a portfolio of any IoT-based monitoring systems you have developed."
