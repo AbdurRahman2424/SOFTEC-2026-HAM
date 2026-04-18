@@ -95,7 +95,7 @@ def init_session_state():
                 "label": "OpenRouter 1 (Fallback 2)",
                 "base_url": env_vars.get("OR1_BASE_URL", "https://openrouter.ai/api/v1"),
                 "api_key": env_vars.get("OR1_API_KEY", ""),
-                "model": env_vars.get("OR1_MODEL", "google/gemini-1.5-flash"),
+                "model": env_vars.get("OR1_MODEL", "nvidia/nemotron-3-nano-30b-a3b:free"),
                 "enabled": env_vars.get("OR1_ENABLED", "True") == "True",
                 "env_prefix": "OR1"
             },
@@ -103,7 +103,7 @@ def init_session_state():
                 "label": "OpenRouter 2 (Fallback 3)",
                 "base_url": env_vars.get("OR2_BASE_URL", "https://openrouter.ai/api/v1"),
                 "api_key": env_vars.get("OR2_API_KEY", ""),
-                "model": env_vars.get("OR2_MODEL", "google/gemini-1.5-flash"),
+                "model": env_vars.get("OR2_MODEL", "nvidia/nemotron-3-nano-30b-a3b:free"),
                 "enabled": env_vars.get("OR2_ENABLED", "False") == "True",
                 "env_prefix": "OR2"
             },
