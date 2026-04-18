@@ -1354,7 +1354,16 @@ def render_activity_log_tab():
 
 def render_sidebar():
     page = st.sidebar.radio(
-        "Navigation", ["My Profile", "Scout Emails", "Priority Board", "AI Guide", "Activity Log"], key="nav_radio", label_visibility="collapsed"
+        "Navigation",
+        [
+            "My Profile",
+            "Scout Emails",
+            "Priority Board",
+            "AI Guide",
+            "Activity Log",
+        ],
+        key="nav_radio",
+        label_visibility="collapsed",
     )
     st.session_state["current_page"] = page
 
@@ -1387,7 +1396,7 @@ def main():
 
     import os
     if os.path.exists("media/logo.png"):
-        st.logo("media/logo.png", icon_image="media/logo.png")
+        st.logo("media/logo.png", icon_image="media/logo.png", size="large")
 
     st.markdown(
         """
@@ -1409,6 +1418,10 @@ def main():
 
     render_sidebar()
     page = st.session_state.get("current_page", "Scout Emails")
+    # Normalise: strip icon prefix if it somehow survived into session state
+    if "  " in page:
+        page = page.split("  ", 1)[-1].strip()
+        st.session_state["current_page"] = page
 
     if page == "My Profile":
         render_profile_tab()
