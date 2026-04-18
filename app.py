@@ -161,74 +161,131 @@ def init_session_state():
 # CUSTOM CSS INJECTION
 # ============================================================================
 def inject_css():
-    primary_color = st.session_state.get("custom_primary_color", "#4f46e5")
+    primary_color = st.session_state.get("custom_primary_color", "#458588")
     st.markdown(
         f"""
     <style>
+    /* =============================================
+       GRUVBOX COLOR TOKENS
+       ============================================= */
     :root {{
-        --primary-color: {primary_color};
+        --primary-color:  {primary_color};
+
+        /* Gruvbox dark surfaces */
+        --gruvbox-bg:       #282828;
+        --gruvbox-bg-hard:  #1d2021;
+        --gruvbox-bg-soft:  #32302f;
+        --gruvbox-bg1:      #3c3836;
+        --gruvbox-bg2:      #504945;
+        --gruvbox-bg3:      #665c54;
+        --gruvbox-bg4:      #7c6f64;
+
+        /* Gruvbox light surfaces */
+        --gruvbox-fg:       #ebdbb2;
+        --gruvbox-fg1:      #d5c4a1;
+        --gruvbox-fg2:      #bdae93;
+        --gruvbox-fg3:      #a89984;
+        --gruvbox-gray:     #928374;
+
+        /* Gruvbox brand accents */
+        --gruvbox-red:      #fb4934;
+        --gruvbox-green:    #b8bb26;
+        --gruvbox-yellow:   #fabd2f;
+        --gruvbox-blue:     #83a598;
+        --gruvbox-purple:   #d3869b;
+        --gruvbox-aqua:     #8ec07c;
+        --gruvbox-orange:   #fe8019;
     }}
-    
-    /* Claude Sidebar Style Overrides */
+
+    /* =============================================
+       THEME-ADAPTIVE SIDEBAR
+       Uses Streamlit's own CSS vars so it flips
+       automatically when the user switches themes.
+       ============================================= */
     [data-testid="stSidebar"] {{
-        background-color: #1e1e1e !important;
+        background-color: var(--secondary-background-color) !important;
+        border-right: 1px solid color-mix(in srgb, var(--text-color) 12%, transparent);
     }}
-    [data-testid="stSidebar"] * {{
-        color: #e5e7eb !important;
+
+    /* Sidebar text inherits theme text color — no hard override */
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] div {{
+        color: var(--text-color) !important;
     }}
+
+    /* =============================================
+       NAV RADIO GROUP — Gruvbox accents
+       ============================================= */
     div[role="radiogroup"] > label > div:first-child {{
         display: none !important;
     }}
     div[role="radiogroup"] > label {{
         padding: 10px 14px;
         border-radius: 8px;
-        margin-bottom: 6px;
-        transition: background-color 0.2s;
+        margin-bottom: 4px;
+        transition: background-color 0.18s, color 0.18s;
         cursor: pointer;
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: var(--text-color) !important;
     }}
     div[role="radiogroup"] > label:hover {{
-        background-color: rgba(255, 255, 255, 0.1) !important;
+        background-color: color-mix(in srgb, var(--primary-color) 15%, transparent) !important;
+        color: var(--primary-color) !important;
     }}
     div[role="radiogroup"] > label[data-selected="true"] {{
-        background-color: rgba(255, 255, 255, 0.15) !important;
-        font-weight: 600;
+        background-color: color-mix(in srgb, var(--primary-color) 22%, transparent) !important;
+        color: var(--primary-color) !important;
+        font-weight: 700;
+        border-left: 3px solid var(--primary-color);
     }}
 
-    /* Primary button */
+    /* =============================================
+       BUTTONS — Gruvbox blue primary
+       ============================================= */
     .stButton > button {{
         background-color: var(--primary-color) !important;
-        color: white !important;
+        color: var(--gruvbox-bg-hard, #1d2021) !important;
         border: none;
         border-radius: 8px;
         padding: 0.5rem 1.5rem;
-        font-weight: 600;
-        transition: background-color 0.2s;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        transition: opacity 0.2s;
     }}
-    .stButton > button:hover {{ opacity: 0.9; }}
+    .stButton > button:hover {{ opacity: 0.88; }}
 
-    /* Score color bars applied via st.markdown on card containers */
-    .score-green  {{ border-left: 5px solid #22c55e; padding: 12px 16px; background: color-mix(in srgb, #22c55e 10%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }}
-    .score-yellow {{ border-left: 5px solid #eab308; padding: 12px 16px; background: color-mix(in srgb, #eab308 10%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }}
-    .score-orange {{ border-left: 5px solid #f97316; padding: 12px 16px; background: color-mix(in srgb, #f97316 10%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }}
-    .score-red    {{ border-left: 5px solid #ef4444; padding: 12px 16px; background: color-mix(in srgb, #ef4444 10%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }}
+    /* =============================================
+       SCORE CARDS — Gruvbox accent colors
+       ============================================= */
+    .score-green  {{ border-left: 5px solid var(--gruvbox-green);  padding: 12px 16px; background: color-mix(in srgb, var(--gruvbox-green)  12%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }}
+    .score-yellow {{ border-left: 5px solid var(--gruvbox-yellow); padding: 12px 16px; background: color-mix(in srgb, var(--gruvbox-yellow) 12%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }}
+    .score-orange {{ border-left: 5px solid var(--gruvbox-orange); padding: 12px 16px; background: color-mix(in srgb, var(--gruvbox-orange) 12%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }}
+    .score-red    {{ border-left: 5px solid var(--gruvbox-red);    padding: 12px 16px; background: color-mix(in srgb, var(--gruvbox-red)    12%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }}
 
-    /* Skill pills */
+    /* =============================================
+       SKILL PILLS — Gruvbox aqua tint
+       ============================================= */
     .skill-pill {{
         display: inline-block;
-        background: color-mix(in srgb, var(--primary-color) 20%, var(--background-color));
+        background: color-mix(in srgb, var(--gruvbox-aqua) 18%, var(--background-color));
         color: var(--text-color);
-        border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--background-color));
+        border: 1px solid color-mix(in srgb, var(--gruvbox-aqua) 45%, transparent);
         border-radius: 12px;
         padding: 2px 10px;
         margin: 2px;
         font-size: 0.85rem;
     }}
 
-    /* App header */
+    /* =============================================
+       APP HEADER
+       ============================================= */
     .app-header {{
         text-align: center;
         padding: 1rem 0 0.5rem 0;
-        border-bottom: 1px solid var(--secondary-background-color);
+        border-bottom: 1px solid color-mix(in srgb, var(--text-color) 12%, transparent);
     }}
     .app-header h1 {{ color: var(--primary-color); font-size: 2rem; margin: 0; }}
     .app-header p  {{ color: var(--text-color); opacity: 0.7; margin: 0; }}
