@@ -156,13 +156,9 @@ def inject_css():
     st.markdown(
         """
     <style>
-    /* Dark theme base */
-    [data-testid="stAppViewContainer"] { background-color: #0f1117; }
-    [data-testid="stSidebar"] { background-color: #1a1d27; border-right: 1px solid #2d3149; }
-
     /* Primary button */
     .stButton > button {
-        background-color: #4f46e5;
+        background-color: var(--primary-color, #4f46e5);
         color: white;
         border: none;
         border-radius: 8px;
@@ -170,19 +166,20 @@ def inject_css():
         font-weight: 600;
         transition: background-color 0.2s;
     }
-    .stButton > button:hover { background-color: #4338ca; }
+    .stButton > button:hover { opacity: 0.9; }
 
     /* Score color bars applied via st.markdown on card containers */
-    .score-green  { border-left: 5px solid #22c55e; padding: 12px 16px; background: #0d1f17; border-radius: 0 8px 8px 0; margin-bottom: 16px; }
-    .score-yellow { border-left: 5px solid #eab308; padding: 12px 16px; background: #1f1d0d; border-radius: 0 8px 8px 0; margin-bottom: 16px; }
-    .score-orange { border-left: 5px solid #f97316; padding: 12px 16px; background: #1f150d; border-radius: 0 8px 8px 0; margin-bottom: 16px; }
-    .score-red    { border-left: 5px solid #ef4444; padding: 12px 16px; background: #1f0d0d; border-radius: 0 8px 8px 0; margin-bottom: 16px; }
+    .score-green  { border-left: 5px solid #22c55e; padding: 12px 16px; background: color-mix(in srgb, #22c55e 10%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }
+    .score-yellow { border-left: 5px solid #eab308; padding: 12px 16px; background: color-mix(in srgb, #eab308 10%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }
+    .score-orange { border-left: 5px solid #f97316; padding: 12px 16px; background: color-mix(in srgb, #f97316 10%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }
+    .score-red    { border-left: 5px solid #ef4444; padding: 12px 16px; background: color-mix(in srgb, #ef4444 10%, var(--secondary-background-color)); border-radius: 0 8px 8px 0; margin-bottom: 16px; }
 
     /* Skill pills */
     .skill-pill {
         display: inline-block;
-        background: #312e81;
-        color: #c7d2fe;
+        background: color-mix(in srgb, var(--primary-color) 20%, var(--background-color));
+        color: var(--text-color);
+        border: 1px solid color-mix(in srgb, var(--primary-color) 50%, var(--background-color));
         border-radius: 12px;
         padding: 2px 10px;
         margin: 2px;
@@ -193,11 +190,10 @@ def inject_css():
     .app-header {
         text-align: center;
         padding: 1rem 0 0.5rem 0;
-        border-bottom: 1px solid #2d3149;
-        margin-bottom: 1rem;
+        border-bottom: 1px solid var(--secondary-background-color);
     }
-    .app-header h1 { color: #818cf8; font-size: 2rem; margin: 0; }
-    .app-header p  { color: #64748b; margin: 0; }
+    .app-header h1 { color: var(--primary-color); font-size: 2rem; margin: 0; }
+    .app-header p  { color: var(--text-color); opacity: 0.7; margin: 0; }
     </style>
     """,
         unsafe_allow_html=True,
@@ -1043,13 +1039,13 @@ def render_board_tab():
             f"""
         <div class="score-{color}">
           <div style="display:flex;justify-content:space-between;align-items:center">
-            <h3 style="margin:0;color:#f1f5f9">{opp.get('title', 'Untitled')}</h3>
+            <h3 style="margin:0;color:inherit;">{opp.get('title', 'Untitled')}</h3>
             <span style="color:{color_hex};font-size:1.4rem;font-weight:bold">{score}/100</span>
           </div>
           <div style="color:{color_hex};font-family:monospace">{bar_filled}{bar_empty}</div>
-          <div style="color:#94a3b8;font-size:0.9rem">
+          <div style="opacity:0.8;font-size:0.9rem">
             {opp.get('organization', 'Unknown Org')} &nbsp;|&nbsp;
-            <b style="color:#818cf8">{opp.get('opportunity_type', '')}</b>
+            <b style="color:{color_hex}">{opp.get('opportunity_type', '')}</b>
           </div>
         </div>
         """,
@@ -1212,149 +1208,70 @@ def render_chatbot_tab():
 # ============================================================================
 # SIDEBAR
 # ============================================================================
+def load_demo_data():
+    st.session_state["profile"] = {
+        "name": "Ahmed Raza",
+        "degree": "BSCS",
+        "semester": 5,
+        "cgpa": 3.2,
+        "skills_raw": "Python, Machine Learning, SQL, React",
+        "skills": ["python", "machine learning", "sql", "react"],
+        "preferred_types": ["Scholarship", "Internship"],
+        "financial_need": True,
+        "location": "No Preference",
+    }
+    demo_email_1 = "From: scholarships@usaid.gov.pk\nSubject: USAID Merit & Need-Based Scholarship 2025\n\nDear Student,\nThe United States Agency for International Development (USAID) invites applications for the USAID Merit-Based Scholarship Program 2025. This scholarship provides PKR 150,000 per semester for undergraduate students in Computer Science, Software Engineering, or Artificial Intelligence programs.\n\nEligibility:\n- Minimum CGPA: 3.0\n- Enrolled in Semester 3 to Semester 7\n- Demonstrated financial need\n\nRequired Documents:\n- Official transcript\n- Completed application form\n- Proof of financial need (family income certificate)\n- Two reference letters\n\nDeadline: Apply before 2025-12-20 at https://scholarships.usaid.gov.pk/apply\n\nContact: scholarships@usaid.gov.pk"
+    demo_email_2 = "From: hr@techventuresLahore.com\nSubject: Paid Machine Learning Internship — Summer 2025\n\nHi,\nTech Ventures Lahore is offering a 3-month paid Machine Learning internship for university students passionate about AI.\nStipend: PKR 30,000/month\nDuration: June–August 2025\nLocation: Johar Town, Lahore (On-site)\n\nRequirements:\n- Python programming skills\n- Familiarity with scikit-learn or TensorFlow\n- Strong SQL fundamentals\n\nApply by 2025-11-30 at https://careers.techventures.pk\nNo minimum CGPA required. Semester 4+ preferred."
+    demo_email_3 = "From: deals@shopmax.pk\nSubject: FLASH SALE! 70% off on all Electronics this weekend only!\nDon't miss out! This weekend only — massive discounts on laptops, phones, and accessories at ShopMax.pk. Use code FLASH70 at checkout. Visit www.shopmax.pk. Offer valid while stocks last."
+    demo_email_4 = "From: talent@deepmind-labs.com\nSubject: INTERNSHIP OFFER: Research Intern (Computer Vision & Robotics)\nDear AbdurRahman, we are pleased to invite you to join the Summer 2026 Internship cohort at DeepMind. Based on your work with YOLO11 and FaceNet architectures, you have been assigned to the Perception Team. This is a 12-week remote-first position starting June 1, 2026. You will receive a monthly stipend of $5,500.00, plus a one-time equipment grant of $2,000.00 for hardware upgrades. Please sign the attached NDA and offer letter by April 28, 2026. Your primary project will involve optimizing real-time inference on edge devices (ESP32-S3). We look forward to your contributions to our neural-link initiatives."
+    demo_email_5 = "From: hr@punjab-agritech.gov.pk\nSubject: JOB OPPORTUNITY: Veterinary Data Analyst (Lahore Office)\nGreetings, Punjab AgriTech is seeking a specialized individual for the role of Veterinary Data Analyst. This unique position requires a bridge between Veterinary Sciences and Data Science. You will be responsible for digitizing livestock health records and implementing predictive models for disease outbreaks in the Ravi River belt. The starting salary is Rs. 185,000 per month with full medical coverage for your family. Candidates must demonstrate proficiency in Python and SQL. Interviews will be held at our Gulberg III office on May 5, 2026. Please bring your transcript and a portfolio of any IoT-based monitoring systems you have developed."
+    demo_email_6 = "From: admissions@fulbright-program.org\nSubject: SCHOLARSHIP UPDATE: Fulbright-USEFP Master’s Award 2027\nDear Applicant, we are pleased to inform you that your preliminary application for the Fulbright Scholarship has been shortlisted. This award covers 100% of tuition fees, a monthly living allowance of $2,100.00, and round-trip airfare to the United States. To proceed to the interview stage, you must submit your final GRE scores and two letters of recommendation by the deadline of August 15, 2026. Given your dual background in CS and Veterinary Sciences, we highly recommend focusing your 'Study Objective' on how AI can revolutionize animal pathology. Please use the portal link below to upload your documents."
+    demo_email_7 = "From: scholarships@hec.gov.pk\nSubject: HEC Indigenous PhD Fellowship — Batch IV Announcement\nNotice: The Higher Education Commission (HEC) of Pakistan is now accepting applications for the Indigenous PhD Fellowship. This scholarship is designed for students currently enrolled in top-tier universities like Bahria University. Selected fellows will receive a monthly stipend of Rs. 45,000 and an annual book allowance of Rs. 10,000. The deadline for the online E-portal submission is May 20, 2026. Applicants must have a minimum CGPA of 3.0 and pass the HAT entry test. Please ensure your department head signs the 'Statement of Purpose' before final submission."
+
+    st.session_state["email_batch"] = [
+        {"text": demo_email_1, "preview": "From: scholarships@usaid.gov.pk", "char_count": len(demo_email_1)},
+        {"text": demo_email_2, "preview": "From: hr@techventuresLahore.com", "char_count": len(demo_email_2)},
+        {"text": demo_email_3, "preview": "From: deals@shopmax.pk", "char_count": len(demo_email_3)},
+        {"text": demo_email_4, "preview": "From: talent@deepmind-labs.com", "char_count": len(demo_email_4)},
+        {"text": demo_email_5, "preview": "From: hr@punjab-agritech.gov.pk", "char_count": len(demo_email_5)},
+        {"text": demo_email_6, "preview": "From: admissions@fulbright-program.org", "char_count": len(demo_email_6)},
+        {"text": demo_email_7, "preview": "From: scholarships@hec.gov.pk", "char_count": len(demo_email_7)},
+    ]
+    st.session_state["scan_complete"] = False
+    st.session_state["results"] = []
+    st.success("Demo data loaded! View it in the Scout Emails tab.")
+
 def render_sidebar():
     st.sidebar.markdown(
-        '<div class="app-header"><h1>Opportunity Scout</h1>'
-        "<p>SOFTEC 2026 — AI Hackathon</p></div>",
+        '<div class="app-header" style="border-bottom:none;"><h2 style="color:var(--primary-color, #4f46e5);margin:0;">Opportunity Scout</h2>'
+        "<p style='color:var(--text-color);opacity:0.7;'>SOFTEC 2026 — AI Hackathon</p></div>",
         unsafe_allow_html=True,
     )
 
     page = st.sidebar.radio(
-        "Navigate", ["Scout", "Admin Panel"], key="nav_radio"
+        "Navigation", ["My Profile", "Scout Emails", "Priority Board", "AI Guide"], key="nav_radio"
     )
     st.session_state["current_page"] = page
 
     st.sidebar.divider()
-
-    # DEMO DATA BUTTON
-    if st.sidebar.button("Load Demo Data", key="load_demo_btn"):
-        st.session_state["profile"] = {
-            "name": "Ahmed Raza",
-            "degree": "BSCS",
-            "semester": 5,
-            "cgpa": 3.2,
-            "skills_raw": "Python, Machine Learning, SQL, React",
-            "skills": ["python", "machine learning", "sql", "react"],
-            "preferred_types": ["Scholarship", "Internship"],
-            "financial_need": True,
-            "location": "No Preference",
-        }
-
-        demo_email_1 = """From: scholarships@usaid.gov.pk
-Subject: USAID Merit & Need-Based Scholarship 2025 — Applications Open
-
-Dear Student,
-
-The United States Agency for International Development (USAID) invites applications for the USAID Merit-Based Scholarship Program 2025. This scholarship provides PKR 150,000 per semester for undergraduate students in Computer Science, Software Engineering, or Artificial Intelligence programs.
-
-Eligibility:
-- Minimum CGPA: 3.0
-- Enrolled in Semester 3 to Semester 7
-- Demonstrated financial need
-
-Required Documents:
-- Official transcript
-- Completed application form
-- Proof of financial need (family income certificate)
-- Two reference letters
-
-Deadline: Apply before 2025-12-20 at https://scholarships.usaid.gov.pk/apply
-
-Contact: scholarships@usaid.gov.pk"""
-
-        demo_email_2 = """From: hr@techventuresLahore.com
-Subject: Paid Machine Learning Internship — Summer 2025
-
-Hi,
-
-Tech Ventures Lahore is offering a 3-month paid Machine Learning internship for university students passionate about AI.
-
-Stipend: PKR 30,000/month
-Duration: June–August 2025
-Location: Johar Town, Lahore (On-site)
-
-Requirements:
-- Python programming skills
-- Familiarity with scikit-learn or TensorFlow
-- Strong SQL fundamentals
-
-Apply by 2025-11-30 at https://careers.techventures.pk
-
-No minimum CGPA required. Semester 4+ preferred."""
-
-        demo_email_3 = """From: deals@shopmax.pk
-Subject: FLASH SALE! 70% off on all Electronics this weekend only!
-
-Don't miss out! This weekend only — massive discounts on laptops, phones, and accessories at ShopMax.pk. Use code FLASH70 at checkout. Visit www.shopmax.pk. Offer valid while stocks last."""
-
-        demo_email_4 = """From: talent@deepmind-labs.com
-Subject: INTERNSHIP OFFER: Research Intern (Computer Vision & Robotics)
-
-Dear AbdurRahman, we are pleased to invite you to join the Summer 2026 Internship cohort at DeepMind. Based on your work with YOLO11 and FaceNet architectures, you have been assigned to the Perception Team. This is a 12-week remote-first position starting June 1, 2026. You will receive a monthly stipend of $5,500.00, plus a one-time equipment grant of $2,000.00 for hardware upgrades. Please sign the attached NDA and offer letter by April 28, 2026. Your primary project will involve optimizing real-time inference on edge devices (ESP32-S3). We look forward to your contributions to our neural-link initiatives.
-Ref ID: #INT-2026-DM"""
-
-        demo_email_5 = """From: hr@punjab-agritech.gov.pk
-Subject: JOB OPPORTUNITY: Veterinary Data Analyst (Lahore Office)
-
-Greetings, Punjab AgriTech is seeking a specialized individual for the role of Veterinary Data Analyst. This unique position requires a bridge between Veterinary Sciences and Data Science. You will be responsible for digitizing livestock health records and implementing predictive models for disease outbreaks in the Ravi River belt. The starting salary is Rs. 185,000 per month with full medical coverage for your family. Candidates must demonstrate proficiency in Python and SQL. Interviews will be held at our Gulberg III office on May 5, 2026. Please bring your transcript and a portfolio of any IoT-based monitoring systems you have developed.
-Job Code: AG-LHE-772"""
-
-        demo_email_6 = """From: admissions@fulbright-program.org
-Subject: SCHOLARSHIP UPDATE: Fulbright-USEFP Master’s Award 2027
-
-Dear Applicant, we are pleased to inform you that your preliminary application for the Fulbright Scholarship has been shortlisted. This award covers 100% of tuition fees, a monthly living allowance of $2,100.00, and round-trip airfare to the United States. To proceed to the interview stage, you must submit your final GRE scores and two letters of recommendation by the deadline of August 15, 2026. Given your dual background in CS and Veterinary Sciences, we highly recommend focusing your "Study Objective" on how AI can revolutionize animal pathology. Please use the portal link below to upload your documents.
-Application ID: PK-2026-FB-99"""
-
-        demo_email_7 = """From: scholarships@hec.gov.pk
-Subject: HEC Indigenous PhD Fellowship — Batch IV Announcement
-
-Notice: The Higher Education Commission (HEC) of Pakistan is now accepting applications for the Indigenous PhD Fellowship. This scholarship is designed for students currently enrolled in top-tier universities like Bahria University. Selected fellows will receive a monthly stipend of Rs. 45,000 and an annual book allowance of Rs. 10,000. The deadline for the online E-portal submission is May 20, 2026. Applicants must have a minimum CGPA of 3.0 and pass the HAT entry test. Please ensure your department head signs the "Statement of Purpose" before final submission.
-Ref: HEC-IND-990"""
-
-        st.session_state["email_batch"] = [
-            {"text": demo_email_1, "preview": "From: scholarships@usaid.gov.pk", "char_count": len(demo_email_1)},
-            {"text": demo_email_2, "preview": "From: hr@techventuresLahore.com", "char_count": len(demo_email_2)},
-            {"text": demo_email_3, "preview": "From: deals@shopmax.pk", "char_count": len(demo_email_3)},
-            {"text": demo_email_4, "preview": "From: talent@deepmind-labs.com", "char_count": len(demo_email_4)},
-            {"text": demo_email_5, "preview": "From: hr@punjab-agritech.gov.pk", "char_count": len(demo_email_5)},
-            {"text": demo_email_6, "preview": "From: admissions@fulbright-program.org", "char_count": len(demo_email_6)},
-            {"text": demo_email_7, "preview": "From: scholarships@hec.gov.pk", "char_count": len(demo_email_7)},
-        ]
-        st.session_state["scan_complete"] = False
-        st.session_state["results"] = []
-        st.sidebar.success("Demo data loaded! Go to Scout tab.")
-        st.rerun()
-
-    # PROFILE SUMMARY
     p = st.session_state["profile"]
     if p["name"]:
         st.sidebar.markdown(
-            f"""
-        **{p['name']}** · Sem {p['semester']} · CGPA {p['cgpa']}  
-        {p['degree']} · {', '.join(p['preferred_types']) or 'No preferences set'}
-        """
+            f"**{p['name']}** · Sem {p['semester']} · CGPA {p['cgpa']}  \n{p['degree']} · {', '.join(p['preferred_types']) or 'No preferences set'}"
         )
 
-    # BATCH STATUS
-    st.sidebar.caption(
-        f"Batch: {len(st.session_state['email_batch'])} emails"
-    )
+    st.sidebar.caption(f"Batch: {len(st.session_state['email_batch'])} emails")
     if st.session_state["scan_complete"]:
-        genuine = sum(
-            1
-            for r in st.session_state["results"]
-            if r.get("is_genuine_opportunity")
-        )
+        genuine = sum(1 for r in st.session_state["results"] if r.get("is_genuine_opportunity"))
         st.sidebar.caption(f"Results: {genuine} opportunities found")
 
-    # API LOG
-    with st.sidebar.expander("📡 API Activity Log"):
+    with st.sidebar.expander("API Activity Log"):
         log = st.session_state["api_log"]
         if log:
             for entry in log[:10]:
-                st.caption(entry)
+                st.sidebar.caption(entry)
         else:
-            st.caption("No API calls yet.")
+            st.sidebar.caption("No API calls yet.")
 
 
 # ============================================================================
@@ -1363,33 +1280,47 @@ Ref: HEC-IND-990"""
 def main():
     init_session_state()
     inject_css()
-    render_sidebar()
 
-    if st.session_state["current_page"] == "Admin Panel":
-        render_admin_panel()
-    else:
+    col1, col2 = st.columns([8, 2])
+    with col1:
         st.markdown(
             """
-        <div class="app-header">
-          <h1>Opportunity Scout AI</h1>
-          <p>Paste your opportunity emails · Get ranked · Take action</p>
+        <div class="app-header" style="text-align:left; border:none; margin:0; padding:0 0 10px 0;">
+          <h1 style="color:var(--primary-color, #4f46e5); margin:0;">Opportunity Scout</h1>
+          <p style="color:var(--text-color); opacity:0.7; margin:0;">Paste your opportunity emails · Get ranked · Take action</p>
         </div>
         """,
             unsafe_allow_html=True,
         )
+    with col2:
+        with st.popover("Options"):
+            if st.button("Load Demo Data", use_container_width=True):
+                load_demo_data()
+            if st.button("Admin Panel", use_container_width=True):
+                st.session_state["current_page"] = "Admin Panel"
+                st.rerun()
 
-        tab1, tab2, tab3, tab4 = st.tabs(
-            ["My Profile", "Scout Emails", "Priority Board", "AI Guide"]
-        )
-        with tab1:
-            render_profile_tab()
-        with tab2:
-            render_scout_tab()
-        with tab3:
-            render_board_tab()
-        with tab4:
-            render_chatbot_tab()
+    st.divider()
 
+    if st.session_state.get("current_page") == "Admin Panel":
+        if st.button("← Back to Scout Dashboard"):
+            st.session_state["current_page"] = "Scout Emails"
+            st.rerun()
+        render_admin_panel()
+        return
+
+    render_sidebar()
+    page = st.session_state.get("current_page", "Scout Emails")
+
+    if page == "My Profile":
+        render_profile_tab()
+    elif page == "Scout Emails":
+        render_scout_tab()
+    elif page == "Priority Board":
+        render_board_tab()
+    elif page == "AI Guide" or page == "Scout":
+        # Make chatbot or other function handle it
+        render_chatbot_tab()
 
 if __name__ == "__main__":
     main()
